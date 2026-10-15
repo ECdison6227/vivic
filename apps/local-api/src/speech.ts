@@ -1,12 +1,14 @@
 import type { StepfunCredential } from "./credentials.js";
 import type { StepfunDeps } from "./stepfun.js";
 import { DEFAULT_SPEECH_VOICE, type SpeechOptions } from "./voices.js";
+import { readSpeechStream } from "./speechStream.js";
+import type { SpeechWord } from "@vivic/contracts";
 
 export const SPEECH_MODEL = "stepaudio-2.5-tts";
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
 
 type SpeechResult =
-  | { ok: true; audio: Uint8Array<ArrayBuffer> }
+  | { ok: true; audio: Uint8Array<ArrayBuffer>; words?: SpeechWord[] }
   | { ok: false; status: 502 | 503 | 504; code: string; error: string };
 
 /** One Plan request, no retries, redirects, alternate models or billing routes. */
@@ -42,11 +44,12 @@ export const synthesizeSpeech = async (
       headers: {
         authorization: `Bearer ${credential.apiKey}`,
         "content-type": "application/json",
-        accept: "audio/mpeg",
+        accept: options.timestamps ? "text/event-stream, audio/mpeg" : "audio/mpeg",
       },
       body: JSON.stringify({
         model: SPEECH_MODEL, input: text, voice: options.voice ?? DEFAULT_SPEECH_VOICE,
         response_format: "mp3", ...(options.speed === undefined ? {} : { speed: options.speed }),
+        ...(options.timestamps ? { timestamp: true, stream_format: "sse" } : {}),
       }),
       redirect: "error",
       signal: requestSignal,
@@ -59,6 +62,15 @@ export const synthesizeSpeech = async (
       };
     }
     const mime = res.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+    if (options.timestamps && mime === "text/event-stream") {
+      try {
+        const result = await readSpeechStream(res, text, requestSignal);
+        return { ok: true, ...result };
+      } catch {
+        requestSignal.throwIfAborted();
+        return { ok: false, status: 502, code: "speech-invalid-stream", error: "语音服务返回的音频流不完整或格式无效，未播放。" };
+      }
+    }
     if (!["audio/mpeg", "audio/mp3", "application/octet-stream"].includes(mime ?? "") ||
         Number(res.headers.get("content-length") ?? 0) > MAX_AUDIO_BYTES || !res.body) {
       await res.body?.cancel();

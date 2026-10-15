@@ -46,6 +46,7 @@ export const SpeechRequestSchema = z.strictObject({
     .regex(/^[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]*$/u, "只接受可见短句").trim().min(1),
   voice: z.enum(SPEECH_VOICE_IDS).optional(),
   speed: z.number().min(0.5).max(2).optional(),
+  timestamps: z.boolean().optional(),
 });
 
 export const IntentResponseSchema = z.strictObject({

@@ -241,7 +241,7 @@ export const createApp = (deps: AppDeps) => {
     if (!parsed.success) {
       return c.json({
         ok: false, code: "speech-invalid-input",
-        error: "语音请求仅接受 text（1–200 字符可见短句）、voice（可选官方音色）、speed（可选 0.5–2）。",
+        error: "语音请求仅接受 text（1–200 字符可见短句）、voice（可选官方音色）、speed（可选 0.5–2）、timestamps（可选布尔值）。",
       }, 400);
     }
     const credential = credentials.getSecret();
@@ -258,6 +258,7 @@ export const createApp = (deps: AppDeps) => {
     if (!result.ok) {
       return c.json({ ok: false, code: result.code, error: result.error }, result.status);
     }
+    if (parsed.data.timestamps) return c.json({ audioBase64: Buffer.from(result.audio).toString("base64"), words: result.words ?? [] });
     c.header("Content-Type", "audio/mpeg");
     c.header("X-Content-Type-Options", "nosniff");
     return c.body(result.audio, 200);

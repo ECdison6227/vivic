@@ -17,4 +17,5 @@ export const DEFAULT_SPEECH_VOICE: SpeechVoiceId = "cixingnansheng";
 export interface SpeechOptions {
   voice?: SpeechVoiceId;
   speed?: number;
+  timestamps?: boolean;
 }
