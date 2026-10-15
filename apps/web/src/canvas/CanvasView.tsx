@@ -1,5 +1,8 @@
 import { presentCards } from "./reminderPresentation";
 import { ReminderListView } from "@/cards/ReminderListView";
+import { TargetBadge } from "@/cards/TargetBadge";
+import { SubcardAnchor } from "@/cards/SubcardAnchor";
+import { SubcardThemeContext } from "@/cards/SubcardEditorContext";
 import type { CountdownCard } from "@/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -43,11 +46,13 @@ const VivicNode = ({ data }: NodeProps<Node<VivicNodeData>>) => {
       data-card-id={entry.record.id}
       data-focused={focused || undefined}
       data-dimmed={dimmed || undefined}
-      data-highlighted={highlight?.cardId === entry.record.id || undefined}
+      data-highlighted={!data.reminders && highlight?.cardId === entry.record.id || undefined}
       data-exiting={entry.exitingRequestId ? true : undefined}
       style={{ width: entry.record.layout.width }}
     >
       {data.reminders ? <ReminderListView cards={data.reminders} focusedId={data.focusedId} highlightedId={highlight?.cardId} /> : <VivicCard record={entry.record} highlight={highlight} />}
+      {!data.reminders && (entry.record.type !== "CountdownCard" || !entry.record.sourceData.reminderText) && <TargetBadge cardId={entry.record.id} />}
+      {!data.reminders && (entry.record.type !== "CountdownCard" || !entry.record.sourceData.reminderText) && <div className="vivic-card-expansion"><SubcardAnchor card={entry.record} /></div>}
     </div>
   );
 };
@@ -59,6 +64,14 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
   const cards = useVivicState((s) => s.cards);
   const focus = useVivicState((s) => s.focus);
   const highlight = useVivicState((s) => s.highlight);
+  const targetChoice = useVivicState(s => s.targetChoice);
+  useEffect(() => {
+    if (!targetChoice) return;
+    const timer = setTimeout(() => {
+      if (canvasStore.getState().targetChoice?.id === targetChoice.id) canvasStore.internal({ type: "targetChoice.set", choice: null });
+    }, Math.max(0, targetChoice.expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [targetChoice]);
   const fitRequestId = useVivicState((s) => s.lastFitRequestId);
   const preferences = useDisplayPreferences();
   // StageRoot supplies the live clock; retain an initial local-time fallback
@@ -224,7 +237,7 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
   }, [fitRequestId, rf, reducedMotion]);
 
   return (
-    <div ref={wrapperRef} className="absolute inset-0 z-10" data-vivic-canvas>
+    <SubcardThemeContext.Provider value={resolvedTheme ?? resolveTheme(preferences.theme, themeAt, preferences)}><div ref={wrapperRef} className="absolute inset-0 z-10" data-vivic-canvas>
       <ReactFlow
         nodes={nodes}
         nodeTypes={nodeTypes}
@@ -254,7 +267,7 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
         fitView
         fitViewOptions={{ padding: 0.25, minZoom: 0.05, maxZoom: 1 }}
       />
-    </div>
+    </div></SubcardThemeContext.Provider>
   );
 };
 

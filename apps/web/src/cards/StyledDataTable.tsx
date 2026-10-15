@@ -1,4 +1,7 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { CardRecord } from "@/contracts";
+import { SubcardAnchor } from "./SubcardAnchor";
 import { renderVivicSpec } from "./vivicGUILibrary";
 
 /** One-based ORIGINAL row position; never a cell's text, value, or an inferred ID. */
@@ -16,13 +19,16 @@ export const StyledDataTable = ({
   rows,
   highlightedItemId,
   maxHeight,
+  card,
 }: {
   columns: readonly string[];
   rows: readonly (readonly unknown[])[];
   highlightedItemId?: string;
   maxHeight: number;
+  card?: CardRecord;
 }) => {
   const container = useRef<HTMLDivElement>(null);
+  const [slots, setSlots] = useState<HTMLElement[]>([]);
 
   useLayoutEffect(() => {
     // Table exposes no row props. Annotate only this instance's existing rows;
@@ -40,6 +46,21 @@ export const StyledDataTable = ({
     });
   }, [columns, rows, highlightedItemId]);
 
+  useLayoutEffect(() => {
+    if (!card) return;
+    const next: HTMLElement[] = [];
+    container.current?.querySelectorAll("tbody > tr").forEach(row => {
+      const cell = row.lastElementChild;
+      if (!cell) return;
+      let slot = cell.querySelector<HTMLElement>("[data-vivic-subcard-slot]");
+      if (!slot) { slot = document.createElement("span"); slot.dataset.vivicSubcardSlot = ""; cell.append(slot); }
+      next.push(slot);
+    });
+    // Synchronize React portals with the installed Table's actual DOM cells.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setSlots(previous => previous.length === next.length && previous.every((slot, i) => slot === next[i]) ? previous : next);
+  }, [card, columns, rows]);
+
   return <div
     ref={container}
     className="nodrag nowheel min-w-0 overflow-auto"
@@ -53,5 +74,6 @@ export const StyledDataTable = ({
       rows: rows.map(row => columns.map((_, index) => displayCell(row[index]))),
       sortable: false,
     })}
+    {card && slots.map((slot, index) => createPortal(<SubcardAnchor card={card} itemId={tableRowItemId(index)} />, slot, tableRowItemId(index)))}
   </div>;
 };

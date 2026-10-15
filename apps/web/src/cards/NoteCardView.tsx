@@ -1,5 +1,7 @@
 import type { NoteCard } from "./dataCardTypes";
+import { Fragment } from "react";
 import { renderVivicSpec } from "./vivicGUILibrary";
+import { SubcardAnchor } from "./SubcardAnchor";
 
 /** Density changes only with the stored variant; Display adds no expand button. */
 export const NoteCardView = ({ card }: { card: NoteCard }) => <div
@@ -10,17 +12,11 @@ export const NoteCardView = ({ card }: { card: NoteCard }) => <div
   }}
   data-vivic-note-variant={card.variant}
 >
-  {renderVivicSpec({
-    _type: "Col",
-    gap: 2,
-    children: [
-      card.displayProps.text ? { _type: "Text", value: card.displayProps.text } : null,
-      ...(card.displayProps.bullets ?? []).map((bullet, index) => ({
-        _type: "Text",
-        _key: String(index),
-        value: `• ${bullet}`,
-        color: "secondary",
-      })),
-    ],
-  })}
+  <div>{card.displayProps.text?.split("\n").map((line, index, lines) => <Fragment key={`line:${index + 1}`}>
+    <div className="vivic-note-line"><SubcardAnchor card={card} itemId={`line:${index + 1}`}>{renderVivicSpec({ _type: "Text", value: line })}</SubcardAnchor></div>
+    {index < lines.length - 1 ? "\n" : null}
+  </Fragment>)}</div>
+  {(card.displayProps.bullets ?? []).map((bullet, index) => <div className="mt-2" key={`bullet:${index + 1}`}>
+    <SubcardAnchor card={card} itemId={`bullet:${index + 1}`}>{renderVivicSpec({ _type: "Text", value: `• ${bullet}`, color: "secondary" })}</SubcardAnchor>
+  </div>)}
 </div>;

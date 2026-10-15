@@ -18,6 +18,8 @@ export interface ClarifyState {
   canvasId?: string;
   candidates: ResolvedCard[];
   prompt: string;
+  choiceId?: string;
+  expiresAt?: number;
 }
 
 interface CommandSectionProps {
@@ -29,6 +31,7 @@ interface CommandSectionProps {
   onSubmit: (text: string, attachments?: Attachment[]) => void;
   ownerKey?: string;
   onPickClarify: (candidate: ResolvedCard) => void;
+  onPreviewClarify?: (candidate: ResolvedCard) => void;
   onCancelClarify: () => void;
   busy: boolean;
   onCancel: () => void;
@@ -42,12 +45,14 @@ export const CommandSection = ({
   backendOnline,
   onSubmit,
   onPickClarify,
+  onPreviewClarify,
   onCancelClarify,
   busy,
   onCancel,
   ownerKey = "control",
 }: CommandSectionProps) => {
   const [text, setText] = useState("");
+  const composing = useRef(false);
   const [elapsed, setElapsed] = useState(0);
   const latestDraft = useRef(text); latestDraft.current = text;
   const draftAtVoiceStart = useRef("");
@@ -122,6 +127,7 @@ export const CommandSection = ({
         className="flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
+          if (composing.current) return;
           submit();
         }}
       >
@@ -132,6 +138,15 @@ export const CommandSection = ({
           disabled={disabled}
           aria-label="指令输入"
           data-vivic-command-input
+          onCompositionStart={() => { composing.current = true; }}
+          onCompositionEnd={() => { composing.current = false; }}
+          onKeyDown={event => {
+            if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) {
+              if (event.key === "Enter") event.preventDefault();
+              return;
+            }
+            if (event.key === "Escape" && clarify) { event.preventDefault(); onCancelClarify(); }
+          }}
         />
         <Button
           type="submit"
@@ -184,15 +199,17 @@ export const CommandSection = ({
         >
           <p className="text-sm text-amber-900">{clarify.prompt}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {clarify.candidates.map((c) => (
+            {clarify.candidates.map((c, index) => (
               <Button
                 key={c.card.id}
                 variant="outline"
                 size="sm"
                 onClick={() => onPickClarify(c)}
+                onPointerEnter={() => onPreviewClarify?.(c)}
+                onFocus={() => onPreviewClarify?.(c)}
                 data-vivic-clarify-candidate
               >
-                {c.label}
+                {index + 1}号 · {c.label}
               </Button>
             ))}
             <Button variant="ghost" size="sm" onClick={onCancelClarify}>

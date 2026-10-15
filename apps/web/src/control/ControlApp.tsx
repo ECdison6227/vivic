@@ -4,6 +4,8 @@ import { cancelSpeech, speakText, subscribeSpeech, getSpeechSnapshot, speakShort
 import { speechDisplayFrame, type SpeechRange } from "@/ai/speechTelemetry";
 import { LocalDecisionSettings } from "./LocalDecisionSettings";
 import { clarifiedCardAction, fastLocalCommand, parseCommand, type CommandResult } from "@/commands/parse";
+import { choiceNumber } from "@/commands/choice";
+import { completedCountdown } from "@/canvas/reminderPresentation";
 import type { ResolvedCard } from "@/commands/references";
 import { applyUrlTheme } from "@/lib/urlTheme";
 import { newId } from "@/lib/id";
@@ -20,6 +22,7 @@ import { deliveredNoticeCurrent } from "@/reminders/reminders";
 import { cancelVoiceInput, getVoiceInputSnapshot, isVoiceInputBusy, subscribeVoiceInput } from "@/ai/voiceInput";
 import { LocalSpeechSettings } from "./LocalSpeechSettings";
 import { CanvasSettings } from "./CanvasSettings";
+import { CardSubcardsSection } from "./CardSubcardsSection";
 import type { Attachment } from "@/ai/attachments";
 import { startsNewInstruction } from "@vivic/contracts";
 
@@ -234,7 +237,7 @@ export const ControlApp = () => {
   const applyResult = useCallback(
     (h: ControlHost, result: CommandResult) => {
       const { activeCanvasId } = h.getSnapshot();
-      setClarify(null); setSuggestions([]);
+      setClarify(null); h.setTargetChoice(null); setSuggestions([]);
       if (result.kind === "unknown") {
         setFeedback(result.message);
         publishFeedback(h, result.message);
@@ -247,20 +250,12 @@ export const ControlApp = () => {
         return;
       }
       if (result.kind === "clarify") {
-        setClarify({ ...result, canvasId: activeCanvasId ?? undefined });
-        // Highlight candidates on stage; nothing destructive happens yet.
-        const dispatched = h.dispatch({
-          schemaVersion: "0.6",
-          requestId: newId("cmd"),
-          canvasId: activeCanvasId ?? "",
-          spokenText: result.prompt,
-          actions: result.candidates.map((c) => ({
-            type: "card.highlight" as const,
-            targetId: c.card.id,
-            durationMs: 4000,
-          })),
-        });
-        if (dispatched.ok) void speakText(result.prompt, { requestId: newId("speech") });
+        const choiceId = newId("choice"), expiresAt = Date.now() + 120_000;
+        const prompt = `${result.prompt} 请回复几号，也可以点击选择。`;
+        setClarify({ ...result, prompt, choiceId, expiresAt, canvasId: activeCanvasId ?? undefined });
+        h.setTargetChoice({ id: choiceId, targets: result.candidates.map(c => c.card.id), expiresAt });
+        setFeedback(prompt); publishFeedback(h, prompt);
+        void speakText(prompt, { requestId: newId("speech") });
         return;
       }
       const res = h.dispatch({
@@ -278,15 +273,67 @@ export const ControlApp = () => {
     [],
   );
 
+  const pickClarify = useCallback(
+    (candidate: ResolvedCard) => {
+      if (!host || !clarify) return;
+      host.setTargetChoice(null);
+      const { activeCanvasId, ownerMode } = host.getSnapshot();
+      if (!activeCanvasId || ownerMode !== "owner" || !clarify.candidates.some(item => item.card.id === candidate.card.id)) return;
+      if ((clarify.expiresAt && Date.now() >= clarify.expiresAt) || (clarify.canvasId && clarify.canvasId !== activeCanvasId)) { setClarify(null); setFeedback("画布已变更，请重新指定卡片。"); return; }
+      const current = canvasStore.getState().cards.find(item => item.record.id === candidate.card.id && !item.exitingRequestId && !completedCountdown(item))?.record;
+      const action = current ? clarifiedCardAction(clarify.action, current) : null;
+      if (!action) { setClarify(null); setFeedback("目标已变更，请重新指定卡片。"); return; }
+      const verb = { delete: "删除", focus: "聚焦", highlight: "高亮", expand: "展开", collapse: "收起" }[clarify.action];
+      const message = `已${verb}${candidate.label}`;
+      const res = host.dispatch({
+        schemaVersion: "0.6",
+        requestId: newId("cmd"),
+        canvasId: activeCanvasId ?? "",
+        spokenText: message,
+        actions: action.type === "card.update" && action.variant !== undefined ? [action, { type: "canvas.fit" }] : [action],
+      });
+      setClarify(null);
+      setFeedback(res.ok ? `${message}${clarify.action === "delete" ? "，可撤销" : ""}` : res.error);
+      if (res.ok) void speakText(message, { requestId: newId("speech") });
+    },
+    [host, clarify],
+  );
+
+  useEffect(() => {
+    if (!host || !clarify) return;
+    const check = () => {
+      const snapshot = host.getSnapshot();
+      const cards = canvasStore.getState().cards;
+      if (snapshot.ownerMode !== "owner" || snapshot.activeCanvasId !== clarify.canvasId
+        || Date.now() >= (clarify.expiresAt ?? Infinity)
+        || clarify.candidates.some(c => !cards.some(entry => entry.record.id === c.card.id && !entry.exitingRequestId && !completedCountdown(entry)))) {
+        setClarify(null); host.setTargetChoice(null); setFeedback("选择已失效，请重新指定目标。");
+      }
+    };
+    const unsubscribe = host.subscribe(check), timer = setInterval(check, 1000);
+    check(); return () => { unsubscribe(); clearInterval(timer); };
+  }, [host, clarify]);
+
   const submitCommand = useCallback(
     (text: string, attachments?: Attachment[]) => {
       if (!host) return;
       const snap = host.getSnapshot();
       if (!snap.activeCanvasId || snap.ownerMode !== "owner") return;
-      cancelPending();
-      setClarify(null); setSuggestions([]);
-      const activeCanvasId = snap.activeCanvasId;
       const trimmed = text.trim();
+      if (clarify && !attachments?.length) {
+        const number = choiceNumber(trimmed);
+        if (number !== null) {
+          const candidate = clarify.candidates[number - 1];
+          if (!candidate) { setFeedback(`请选 1 到 ${clarify.candidates.length} 号。`); return; }
+          pickClarify(candidate); return;
+        }
+        if (/^(?:取消|算了|不删了|不用了)$/.test(trimmed)) {
+          setClarify(null); host.setTargetChoice(null); setFeedback("已取消选择"); return;
+        }
+      }
+      cancelPending();
+      setClarify(null); host.setTargetChoice(null); setSuggestions([]);
+      const activeCanvasId = snap.activeCanvasId;
       const previous = previousQuestion.current;
       const continuation = previous && previous.canvasId === activeCanvasId && Date.now() - previous.at < 120_000 && trimmed.length <= 80
         && !attachments?.length && !startsNewInstruction(trimmed)
@@ -416,33 +463,9 @@ export const ControlApp = () => {
         }
       })();
     },
-    [host, applyResult, cancelPending],
+    [host, applyResult, cancelPending, clarify, pickClarify],
   );
 
-  const pickClarify = useCallback(
-    (candidate: ResolvedCard) => {
-      if (!host || !clarify) return;
-      const { activeCanvasId, ownerMode } = host.getSnapshot();
-      if (!activeCanvasId || ownerMode !== "owner" || !clarify.candidates.some(item => item.card.id === candidate.card.id)) return;
-      if (clarify.canvasId && clarify.canvasId !== activeCanvasId) { setClarify(null); setFeedback("画布已变更，请重新指定卡片。"); return; }
-      const current = canvasStore.getState().cards.find(item => item.record.id === candidate.card.id && !item.exitingRequestId)?.record;
-      const action = current ? clarifiedCardAction(clarify.action, current) : null;
-      if (!action) { setClarify(null); setFeedback("目标已变更，请重新指定卡片。"); return; }
-      const verb = { delete: "删除", focus: "聚焦", expand: "展开", collapse: "收起" }[clarify.action];
-      const message = `已${verb}${candidate.label}`;
-      const res = host.dispatch({
-        schemaVersion: "0.6",
-        requestId: newId("cmd"),
-        canvasId: activeCanvasId ?? "",
-        spokenText: message,
-        actions: action.type === "card.update" && action.variant !== undefined ? [action, { type: "canvas.fit" }] : [action],
-      });
-      setClarify(null);
-      setFeedback(res.ok ? `${message}${clarify.action === "delete" ? "，可撤销" : ""}` : res.error);
-      if (res.ok) void speakText(message, { requestId: newId("speech") });
-    },
-    [host, clarify],
-  );
 
   if (!host) {
     return (
@@ -460,7 +483,7 @@ export const ControlApp = () => {
       suggestions={suggestions}
       onSubmit={submitCommand}
       onPickClarify={pickClarify}
-      onCancelClarify={() => setClarify(null)}
+      onCancelClarify={() => { setClarify(null); host.setTargetChoice(null); setFeedback("已取消选择"); }}
       backendOnline={backendOnline}
       onBackendChange={setBackendOnline}
       busy={busy}
@@ -536,6 +559,13 @@ const ControlShell = (props: ShellProps) => {
           backendOnline={props.backendOnline}
           onSubmit={props.onSubmit}
           onPickClarify={props.onPickClarify}
+          onPreviewClarify={candidate => {
+            const current = props.host.getSnapshot();
+            if (current.ownerMode === "owner" && current.activeCanvasId === props.clarify?.canvasId) {
+              props.host.dispatch({ schemaVersion: "0.6", requestId: newId("preview"), canvasId: current.activeCanvasId,
+                actions: [{ type: "card.highlight", targetId: candidate.card.id, durationMs: 5000 }] });
+            }
+          }}
           onCancelClarify={props.onCancelClarify}
           busy={props.busy}
           onCancel={props.onCancel}
@@ -565,6 +595,7 @@ const ControlShell = (props: ShellProps) => {
           readonly={readonly}
         />
         <CanvasSettings host={props.host} disabled={readonly || !snap.ready} />
+        <CardSubcardsSection host={props.host} />
         <LocalDecisionSettings disabled={readonly || !snap.ready} />
 
         <RemindersSection host={props.host} readonly={readonly} />

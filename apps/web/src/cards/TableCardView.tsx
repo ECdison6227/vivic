@@ -5,6 +5,7 @@ export const TableCardView = ({ card, highlightedItemId }: {
   card: TableCard;
   highlightedItemId?: string;
 }) => <StyledDataTable
+  card={card}
   columns={card.displayProps.columns}
   rows={card.displayProps.rows}
   highlightedItemId={highlightedItemId}

@@ -1462,9 +1462,25 @@
 }
 
 /* Named reminders share one existing card shell; bare timers keep digits only. */
-.vivic-reminder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1.25rem; align-items: center; min-height: 56px; }
+.vivic-reminder-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1.25rem; align-items: center; min-height: 56px; }
 .vivic-reminder-row + .vivic-reminder-row { border-top: 1px solid color-mix(in oklab, var(--border) 45%, transparent); }
 .vivic-reminder-row > [data-aui="text"] { font-size: 1.125rem; line-height: 1.5; overflow-wrap: anywhere; }
 .vivic-reminder-time { display: grid; justify-items: end; }
 .vivic-reminder-time [data-aui="text"] { font-size: 1.875rem; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; white-space: nowrap; }
 .vivic-reminder-row[data-reminder-focused] > [data-aui="text"] { font-weight: 650; }
+
+.vivic-card { position: relative; pointer-events: auto; }
+.vivic-target-badge { position: absolute; top: -12px; left: -12px; z-index: 4; display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 5px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); border: 2px solid var(--card); font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; box-shadow: 0 2px 8px #0002; pointer-events: none; }
+.vivic-reminder-row > .vivic-target-badge { top: 15px; left: -31px; }
+.vivic-inspect-number .vivic-target-badge { position: static; }
+.vivic-card-expansion { position: absolute; top: 6px; right: 6px; }
+.vivic-subcard-anchor { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.vivic-note-line { display: inline-flex; width: 100%; min-height: 24px; vertical-align: top; }
+.vivic-note-line > * { flex: 1; min-width: 0; }
+.vivic-subcard-trigger { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 3px; min-width: 26px; min-height: 28px; border-radius: 6px; color: var(--muted-foreground); cursor: pointer; transition: color 140ms, background 140ms; font-size: 11px; }
+.vivic-subcard-trigger:hover, .vivic-subcard-trigger:focus-visible { color: var(--foreground); background: var(--muted); outline: 2px solid var(--ring); outline-offset: 2px; }
+.vivic-subcard-trigger[data-has-subcards] { color: var(--primary); background: color-mix(in oklab, var(--primary) 8%, transparent); }
+.vivic-subcard-popover { z-index: 80; width: min(380px, calc(100vw - 24px)); max-height: min(640px, var(--radix-popover-content-available-height)); padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); color: var(--card-foreground); box-shadow: 0 16px 48px -12px #0004; transform-origin: var(--radix-popover-content-transform-origin); }
+.vivic-subcard-scroll { overflow: auto; max-height: min(510px, calc(var(--radix-popover-content-available-height) - 120px)); overscroll-behavior: contain; }
+[data-vivic-subcard-slot] { display: inline-flex; vertical-align: middle; margin-left: 8px; }
+.vivic-reminder-row .vivic-subcard-anchor [data-aui="text"] { font-size: 1.125rem; line-height: 1.5; overflow-wrap: anywhere; }
