@@ -2,7 +2,7 @@
 
 先读 [README_FIRST.md](README_FIRST.md) 和 [当前交接](docs/AGENT_HANDOFF.md)，再按任务读取模块。原产品约束见 [完整规约](Vivic_Kimi_Handoff_v0.6/AGENTS.md)，不要根据旧阶段报告重复开发。
 
-- 这是 Web 信息画布，Control/Display 双视图；Display 保持极简，倒计时默认只有数字。
+- 这是 Web 信息画布，Control/Display 双视图；Display 保持极简。2026-10-16 用户反馈更新：纯计时器只有数字；带事项的提醒显示事项与时间，未固定提醒合并呈现，到时后退出画布、记录留在 Control。
 - 保留已批准的 SmoothUI Orb、React Bits Grainient、Assistant UI styled registry、React Flow、Motion、Radix/shadcn、Lucide、Recharts；不要自行重画替代。
 - LLM 只接 StepFun Coding Plan、GPT/Pi OAuth。语音独立；Pi 只迁移认证/模型，不启用 coding tools、session、扩展或 skills，不开发新 OAuth 协议。
 - 模型只生成校验后的 Action/数据，不能执行代码或虚构联网数据。图片仅用于当前明确发送的请求。

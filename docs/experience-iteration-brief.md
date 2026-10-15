@@ -1,6 +1,6 @@
 # 下一 case：三项体验优化
 
-状态：用户已给出候选实施 prompt，当前仅评审和交接，**尚未授权现在开始实现**。先完成 [手动验收与新 GPT 登录验证](USER_ACCEPTANCE_NOW.md)，再按用户的新 case 指令启动。
+状态：用户已给出候选实施 prompt，当前仅评审和交接，**本 case 不实施这三项**。2026-10-16 已先修正 [手测反馈](manual-feedback-20261016.md) 并完成新 GPT 授权和真实验证；后续按用户的新 case 指令启动，不重做已完成的交互修复。
 
 工作目录 `/Users/cjr/Projects/vivic`，当前分支 `agent/next-iteration`。先读 README_FIRST、当前 AGENT_HANDOFF、原 COMPONENT_LOCK、`docs/research/hark-reuse-assessment.md`、`docs/research/open-source-experience-candidates.md`。研究提交 `e7b3f15`，只能用于研究结论，不能据此重复开发当前已有模块。
 
