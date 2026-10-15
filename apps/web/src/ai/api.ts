@@ -51,7 +51,7 @@ export interface CanvasContextPayload {
   }>;
 }
 
-const secretFields = new Set(["apiKey", "token", "secret"]);
+const secretFields = new Set(["apikey", "token", "secret"]);
 
 /** Whitelist summary so provider keys/real source URLs never leak context. */
 const summarizeSourceData = (
