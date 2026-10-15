@@ -12,6 +12,7 @@ export const actionExecutionIssue = (actions: Action[], ctx: CanvasContext): str
   const targets = new Map<string, Target>(ctx.cards.map((c) => [c.id, c]));
   const usedIds = new Set(targets.keys());
   for (const action of actions) {
+    if (action.type === "card.subcard.set" || action.type === "card.subcard.delete") return "子卡片请通过控制端编辑并校验原行";
     if (action.type === "card.create") {
       const { card } = action;
       if (!CREATABLE.has(card.type)) return "尚未接入真实数据的卡片不能创建（Weather/Table/Chart/Search）";

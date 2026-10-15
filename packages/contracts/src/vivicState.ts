@@ -34,6 +34,12 @@ const CardStateSchema = z.strictObject({
   exitingRequestId: z.string().min(1).max(128).optional(),
 });
 
+export const TargetChoiceSchema = z.strictObject({
+  id: z.string().min(1).max(128),
+  targets: z.array(z.string().min(1).max(128)).min(2).max(1000).refine(ids => new Set(ids).size === ids.length),
+  expiresAt: z.number().finite(),
+});
+
 export const VivicStateSchema = z.strictObject({
   stage: z.enum(["STANDBY", "AWAKENING", "WORKSPACE"]),
   awakenedAt: z.number().nullable(),
@@ -70,6 +76,7 @@ export const VivicStateSchema = z.strictObject({
     })
     .nullable(),
   activity: ActivitySchema.nullable().default(null),
+  targetChoice: TargetChoiceSchema.nullable().default(null),
   ambient: z.strictObject({
     preset: z.enum(["grainient", "clouds", "clouds2"]),
     theme: z.enum(["auto", "light", "dark"]),

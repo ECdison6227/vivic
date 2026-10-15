@@ -13,6 +13,15 @@ export const EvidenceRefSchema = z.strictObject({
 
 const cardId = z.string().min(1).max(128);
 
+/** Row-bound notes are embedded in their parent, so delete/undo/export stay atomic. */
+export const SubcardSchema = z.strictObject({
+  id: cardId,
+  itemId: cardId.optional(),
+  anchor: z.string().max(128).optional(),
+  text: z.string().trim().min(1).max(2000),
+});
+export type Subcard = z.infer<typeof SubcardSchema>;
+
 export const LayoutSchema = z.strictObject({
   x: z.number(),
   y: z.number(),
@@ -25,6 +34,7 @@ export const MetadataSchema = z.strictObject({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   aliases: z.array(z.string().max(80)).max(12).optional(),
+  subcards: z.array(SubcardSchema).max(24).refine(items => new Set(items.map(item => item.id)).size === items.length).optional(),
 });
 
 const CommonShape = {

@@ -1,5 +1,5 @@
 import { notifyReminder } from "@/reminders/notifications";
-import { ActionEnvelopeSchema, type ActionEnvelope } from "@/contracts";
+import { ActionEnvelopeSchema, TargetChoiceSchema, type ActionEnvelope } from "@/contracts";
 import { newId } from "@/lib/id";
 import {
   emptyVivicState,
@@ -82,6 +82,7 @@ export interface ControlHost {
   setPreferences: (patch: Partial<DisplayPreferences>) => DispatchResult;
   arrangeCanvas: () => DispatchResult;
   setActivity: (requestId: string, activity: VivicState["activity"]) => void;
+  setTargetChoice: (choice: VivicState["targetChoice"]) => void;
   undo: () => boolean;
   createCanvas: (title?: string) => string;
   renameCanvas: (id: string, title: string) => void;
@@ -283,6 +284,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     if (vivicState.activity && vivicState.activity.expiresAt <= Date.now()) {
       vivicState.activity = null;
     }
+    if (vivicState.targetChoice && vivicState.targetChoice.expiresAt <= Date.now()) vivicState.targetChoice = null;
     return { title: meta.title, version: meta.version, vivicState, preferences,
       activeCanvasId: activeCanvasId ?? canvasId, ownerId: instanceId };
   };
@@ -297,8 +299,12 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     }
     const meta = records.get(canvasId);
     if (meta && meta.version > (persistedVersions.get(canvasId) ?? -1)) {
-      void persistence.then(() => {
-        if ((persistedVersions.get(canvasId) ?? -1) >= (records.get(canvasId)?.version ?? Infinity)) postSnapshot(canvasId);
+      const waitingFor = persistence;
+      void waitingFor.then(() => {
+        // A command can enqueue a newer write immediately after switching.
+        // Follow that queue before publishing; otherwise an unpinned Display
+        // ignores the new-canvas patch forever while its switch snapshot is lost.
+        if (persistence !== waitingFor || (persistedVersions.get(canvasId) ?? -1) >= (records.get(canvasId)?.version ?? Infinity)) postSnapshot(canvasId);
       }).catch(() => undefined);
       return;
     }
@@ -422,6 +428,15 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
       requestId: newId("activity"),
       payload: { requestId, activity },
     });
+  };
+  const setTargetChoice: ControlHost["setTargetChoice"] = choice => {
+    if (!writable() || !activeCanvasId) return;
+    if (choice && (!TargetChoiceSchema.safeParse(choice).success || choice.expiresAt <= Date.now()
+      || choice.targets.some(id => !store.getState().cards.some(c => c.record.id === id && !c.exitingRequestId)))) return;
+    store.internal({ type: "targetChoice.set", choice });
+    deps.channel.post({ type: "target-choice", canvasId: activeCanvasId, epoch: sessionEpoch,
+      version: records.get(activeCanvasId)?.version ?? 0, seq: seqByCanvas.get(activeCanvasId) ?? 0,
+      requestId: newId("choice"), payload: { choice } });
   };
   const withSpokenSubtitle = (
     envelope: ActionEnvelope,
@@ -886,6 +901,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     setPreferences,
     arrangeCanvas,
     setActivity,
+    setTargetChoice,
     checkReminders,
     undo,
     createCanvas,

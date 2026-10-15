@@ -32,6 +32,7 @@ export interface DisplayClientStatus {
   ownerAlive: boolean;
   hydrated: boolean;
   canInteract: boolean;
+  viewKey: string;
 }
 
 export interface CanvasDrag {
@@ -163,6 +164,12 @@ export const createDisplayClient = (
   const unsubscribeChannel = deps.channel.subscribe((msg) => {
     if (stopped) return;
     switch (msg.type) {
+      case "target-choice": {
+        if (!hydrated || msg.canvasId !== canvasId || msg.epoch !== epoch) return;
+        const choice = msg.payload.choice;
+        store.internal({ type: "targetChoice.set", choice: choice && choice.expiresAt > Date.now() ? choice : null });
+        return;
+      }
       case "local-data-reset": {
         if (ownerEpoch && msg.payload.ownerId !== ownerEpoch) return;
         stateGeneration++;
@@ -196,6 +203,7 @@ export const createDisplayClient = (
           ownerAlive = false;
           resyncing = false;
           store.internal({ type: "activity.set", activity: null });
+          store.internal({ type: "targetChoice.set", choice: null });
           return;
         }
         // on / takeover: a NEW owner session after we had one => resync.
@@ -243,7 +251,9 @@ export const createDisplayClient = (
     requestSnapshot(pinned);
     retryTimer = setInterval(() => {
       if (stopped) return;
-      if (ownerAlive && Date.now() - lastOwnerSeenAt >= 3600) ownerAlive = false;
+      if (ownerAlive && Date.now() - lastOwnerSeenAt >= 3600) {
+        ownerAlive = false; store.internal({ type: "targetChoice.set", choice: null });
+      }
       // Retry unanswered hello/resync requests; an owner that was absent at
       // startup must not leave this reader permanently stuck in resyncing.
       if ((!ownerAlive || resyncing) && Date.now() - pendingSnapshotAt >= 1200) {
@@ -279,6 +289,6 @@ export const createDisplayClient = (
         payload: { ownerEpoch: epoch, interaction: { kind: "card.move", cardId: drag.cardId, from: drag.from, x, y } } });
       return true;
     },
-    getStatus: () => ({ canvasId, version, ownerAlive: ownerAlive && Date.now() - lastOwnerSeenAt < 3600, hydrated, canInteract: canInteract() }),
+    getStatus: () => ({ canvasId, version, ownerAlive: ownerAlive && Date.now() - lastOwnerSeenAt < 3600, hydrated, canInteract: canInteract(), viewKey: `${canvasId}:${epoch}` }),
   };
 };

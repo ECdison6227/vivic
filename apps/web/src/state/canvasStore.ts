@@ -6,6 +6,7 @@ import {
   type Action,
   type ActionEnvelope,
   type CardRecord,
+  validCardTarget,
 } from "@/contracts";
 import { CanvasInteractionSchema, DEFAULT_DISPLAY_PREFERENCES, DisplayPreferencesSchema,
   type DisplayPreferences } from "@/sync/protocol";
@@ -61,6 +62,7 @@ export interface VivicState {
   highlight: HighlightState | null;
   subtitle: SubtitleState | null;
   activity: import("@vivic/contracts").SerializedVivicState["activity"];
+  targetChoice: import("@vivic/contracts").SerializedVivicState["targetChoice"];
   ambient: { preset: "grainient" | "clouds" | "clouds2"; theme: ThemeMode };
   viewport: Viewport;
   /** One-shot effect pings for the view layer. */
@@ -88,6 +90,7 @@ const initialState = (): VivicState => ({
   highlight: null,
   subtitle: null,
   activity: null,
+  targetChoice: null,
   ambient: { preset: "grainient", theme: "auto" },
   viewport: { x: 0, y: 0, zoom: 1 },
   lastFitRequestId: null,
@@ -233,6 +236,18 @@ const applyAction = (
           durationMs: action.durationMs ?? 2000,
         },
       };
+    }
+    case "card.subcard.set":
+    case "card.subcard.delete": {
+      const entry = state.cards.find(c => c.record.id === action.targetId && !c.exitingRequestId && !completedCountdown(c));
+      if (!entry) return state;
+      const previous = entry.record.metadata.subcards ?? [];
+      if (action.type === "card.subcard.set" && !validCardTarget(entry.record, action.subcard)) return state;
+      const subcards = action.type === "card.subcard.delete" ? previous.filter(item => item.id !== action.subcardId)
+        : [...previous.filter(item => item.id !== action.subcard.id), action.subcard];
+      const parsed = CardRecordSchema.safeParse({ ...entry.record, metadata: { ...entry.record.metadata, subcards, updatedAt: new Date().toISOString() } });
+      if (!parsed.success) return state;
+      return { ...state, cards: state.cards.map(c => c === entry ? { ...c, record: parsed.data } : c) };
     }
     case "card.update": {
       const index = state.cards.findIndex(
@@ -380,6 +395,7 @@ export const getUndoGroup = (state: VivicState): VivicState["undoStack"] => {
 };
 
 export type InternalAction =
+  | { type: "targetChoice.set"; choice: VivicState["targetChoice"] }
   | { type: "activity.set"; activity: VivicState["activity"] }
   | { type: "stage.awakening.complete" }
   | { type: "card.delete.commit"; requestId: string }
@@ -394,6 +410,8 @@ const reduceInternal = (
   action: InternalAction,
 ): VivicState => {
   switch (action.type) {
+    case "targetChoice.set":
+      return { ...state, targetChoice: action.choice };
     case "activity.set":
       return { ...state, activity: action.activity };
     case "stage.awakening.complete": {

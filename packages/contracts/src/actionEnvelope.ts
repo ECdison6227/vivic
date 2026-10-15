@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CardRecordSchema, CardVariantSchema } from "./cardRecord";
+import { CardRecordSchema, CardVariantSchema, SubcardSchema } from "./cardRecord";
 
 const id = z.string().min(1).max(128);
 
@@ -12,6 +12,8 @@ export const ActionSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("card.delete"), targetId: id }),
   z.strictObject({ type: z.literal("cards.delete"), targetIds: z.array(id).min(1).max(1000).refine(ids => new Set(ids).size === ids.length) }),
   z.strictObject({ type: z.literal("card.focus"), targetId: id }),
+  z.strictObject({ type: z.literal("card.subcard.set"), targetId: id, subcard: SubcardSchema }),
+  z.strictObject({ type: z.literal("card.subcard.delete"), targetId: id, subcardId: id }),
   z.strictObject({
     type: z.literal("card.highlight"),
     targetId: id,

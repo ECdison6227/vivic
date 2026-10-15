@@ -281,6 +281,52 @@
               "type"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "card.subcard.set"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "subcard": {
+                "$ref": "card-record.schema.json#/$defs/subcard"
+              }
+            },
+            "required": [
+              "type",
+              "targetId",
+              "subcard"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "card.subcard.delete"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "subcardId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "type",
+              "targetId",
+              "subcardId"
+            ],
+            "additionalProperties": false
           }
         ]
       },

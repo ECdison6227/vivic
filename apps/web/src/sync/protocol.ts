@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ActionEnvelopeSchema, VivicStateSchema } from "@/contracts";
-import { ActivitySchema } from "@vivic/contracts";
+import { ActivitySchema, TargetChoiceSchema } from "@vivic/contracts";
 
 /**
  * BroadcastChannel('vivic:canvas:v1') message protocol — ARCHITECTURE §4.
@@ -51,6 +51,7 @@ const msgBase = {
 };
 
 export const SyncMessageSchema = z.discriminatedUnion("type", [
+  z.strictObject({ ...msgBase, type: z.literal("target-choice"), payload: z.strictObject({ choice: TargetChoiceSchema.nullable() }) }),
   z.strictObject({
     ...msgBase, type: z.literal("local-data-reset"), canvasId: z.string().min(1).max(128),
     payload: z.strictObject({ ownerId: z.string().min(1).max(64) }),

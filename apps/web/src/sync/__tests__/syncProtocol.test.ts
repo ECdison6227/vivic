@@ -67,6 +67,37 @@ const setup = async () => {
 };
 
 describe("sync protocol (control host + display client over stub channel)", () => {
+  it("broadcasts frozen target numbers without persisting them or advancing action sequence, including newly opened displays", async () => {
+    const { hub, host, db, hostStore, client, displayStore, canvasId } = await setup();
+    host.dispatch(envelope(canvasId, ["a", "b", "c", "d"].map(id => ({ type: "card.create", card: todoCard(id, [id]) }))));
+    await flushChannel(); await flushChannel();
+    const version = client.getStatus().version;
+    const choice = { id: "TEST-choice", targets: ["d", "b", "a", "c"], expiresAt: Date.now() + 60000 };
+    host.setTargetChoice(choice); await flushChannel();
+    expect(displayStore.getState().targetChoice).toEqual(choice); expect(client.getStatus().version).toBe(version);
+    const lateStore = createCanvasStore(); const late = createDisplayClient({ channel: hub.createChannel(), store: lateStore, pinnedCanvasId: canvasId });
+    await late.start(); await flushChannel(); expect(lateStore.getState().targetChoice).toEqual(choice);
+    host.dispatch(envelope(canvasId, [{ type: "card.subcard.set", targetId: "b", subcard: { id: "child", itemId: "b-i0", text: "详情" } }]));
+    await flushChannel(); await flushChannel();
+    expect(displayStore.getState().cards.find(c => c.record.id === "b")?.record.metadata.subcards?.[0]?.text).toBe("详情");
+    const saved = await db.getCanvas(canvasId); expect(saved).not.toHaveProperty("targetChoice");
+    expect(saved?.cardsById.b?.metadata.subcards?.[0]?.text).toBe("详情");
+    host.setTargetChoice(null); await flushChannel(); expect(displayStore.getState().targetChoice).toBeNull();
+    expect(hostStore.getState().targetChoice).toBeNull(); late.stop(); host.stop(); client.stop();
+  });
+  it("clears choice on owner disconnect, rejects other-canvas/epoch messages and never revives it from disk", async () => {
+    const { hub, host, db, client, displayStore, canvasId } = await setup();
+    host.dispatch(envelope(canvasId, ["a", "b"].map(id => ({ type: "card.create", card: todoCard(id, [id]) }))));
+    await flushChannel(); await flushChannel();
+    const choice = { id: "TEST-choice", targets: ["a", "b"], expiresAt: Date.now() + 60000 };
+    host.setTargetChoice(choice); await flushChannel(); expect(displayStore.getState().targetChoice).toEqual(choice);
+    const channel = hub.createChannel();
+    channel.post({ type: "target-choice", canvasId, epoch: "fake", version: 0, seq: 0, requestId: "fake", payload: { choice: null } });
+    await flushChannel(); expect(displayStore.getState().targetChoice).toEqual(choice);
+    host.stop(); await flushChannel(); expect(displayStore.getState().targetChoice).toBeNull();
+    const restored = createCanvasStore(); const fresh = createDisplayClient({ db, channel: hub.createChannel(), store: restored, pinnedCanvasId: canvasId });
+    await fresh.start(); expect(restored.getState().targetChoice).toBeNull(); fresh.stop(); client.stop();
+  });
   it("request feedback syncs without advancing canvas versions and stale clears cannot hide a newer request", async () => {
     const { host, client, displayStore, canvasId } = await setup();
     const before = client.getStatus().version;
@@ -251,10 +282,13 @@ describe("sync protocol (control host + display client over stub channel)", () =
 
     const second = host.createCanvas("第二画布");
     host.switchCanvas(second);
+    // No flush between switch and edit: the revision-0 save must not swallow
+    // the switch snapshot when revision 1 is already queued.
+    host.dispatch(envelope(second, [{ type: "card.create", card: todoCard("immediate", ["立即编辑"]) }]));
     await flushChannel();
     await flushChannel();
     expect(client.getStatus().canvasId).toBe(second);
-    expect(displayStore.getState().cards).toHaveLength(0);
+    expect(displayStore.getState().cards.map(c => c.record.id)).toEqual(["immediate"]);
   });
 
   it("owner restart (new epoch) re-syncs without duplicating actions", async () => {

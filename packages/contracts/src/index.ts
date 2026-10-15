@@ -1,4 +1,5 @@
 export * from "./cardRecord";
+export * from "./cardTargets";
 export * from "./actionEnvelope";
 export * from "./vivicState";
 export * from "./intentText";

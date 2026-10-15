@@ -31,6 +31,7 @@ const baseVivicState = (): Omit<VivicState, "cards" | "viewport" | "focusHistory
   highlight: null,
   subtitle: null,
   activity: null,
+  targetChoice: null,
   ambient: { preset: "grainient", theme: "auto" },
   lastFitRequestId: null,
 });

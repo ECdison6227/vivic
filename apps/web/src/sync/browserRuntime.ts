@@ -48,6 +48,7 @@ export interface DisplayRuntime {
 
 let displayStarted: Promise<DisplayRuntime> | null = null;
 let displayRuntime: DisplayRuntime | null = null;
+export const getDisplayStatus = () => displayRuntime?.getStatus() ?? null;
 let displayCanvasKey: string | null = null;
 let displayGeneration = 0;
 

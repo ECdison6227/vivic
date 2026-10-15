@@ -21,7 +21,7 @@ export interface CommandContext {
   now?: () => number;
 }
 
-export type CommandClarifyAction = "delete" | "focus" | "expand" | "collapse";
+export type CommandClarifyAction = "delete" | "focus" | "highlight" | "expand" | "collapse";
 
 export type CommandResult =
   | {
@@ -104,6 +104,7 @@ export const clarifiedCardAction = (intent: CommandClarifyAction, card: CardReco
   if (intent === "expand" || intent === "collapse") {
     return card.type === "NoteCard" ? { type: "card.update", targetId: card.id, variant: intent === "expand" ? "expanded" : "minimal" } : null;
   }
+  if (intent === "highlight") return { type: "card.highlight", targetId: card.id, durationMs: 6000 };
   return intent === "delete" ? { type: "card.delete", targetId: card.id } : { type: "card.focus", targetId: card.id };
 };
 
@@ -116,7 +117,7 @@ export const parseCommand = (
   rawInput: string,
   ctx: CommandContext,
 ): CommandResult => {
-  const input = rawInput.trim();
+  const input = rawInput.trim().replace(/^取消(?=.+(?:提醒|倒计时)[。！!]?$)/, "删除");
   const now = ctx.now?.() ?? Date.now();
   if (!input) return { kind: "unknown", message: "请输入指令" };
 
@@ -158,7 +159,7 @@ export const parseCommand = (
   }
 
   // A reference command cannot silently execute only the first clause.
-  if (/^(?:删除|删掉|删了|删|移除|去掉|放大|聚焦|看一看|看下|看看|focus)/i.test(input)
+  if (/^(?:删除|删掉|删了|删|移除|去掉|放大|聚焦|高亮|选中|看一看|看下|看看|focus)/i.test(input)
     && /然后|并且|同时|顺便|接着|不要|不用|别|[，,；;\n]|再(?:删|创建|聚焦|添加|提醒|显示|恢复|放大)|并(?:删|创建|聚焦|添加|提醒)|(?:待办|倒计时|便笺|便签|卡片).*(?:和|以及|与|或者).*(?:待办|倒计时|便笺|便签|卡片)/.test(input)) {
     return { kind: "unknown", message: "请将多个操作或否定要求拆开说明；本次未执行任何部分。" };
   }
@@ -251,8 +252,9 @@ export const parseCommand = (
   }
 
   // focus by reference
-  const focusMatch = input.match(/^(?:放大|聚焦|看一看|看下|看看|focus)\s*(.+)$/i);
+  const focusMatch = input.match(/^(?:放大|聚焦|高亮|选中|看一看|看下|看看|focus)\s*(.+)$/i);
   if (focusMatch) {
+    const highlighting = /^(?:高亮|选中)/.test(input);
     const resolution = resolveReference(focusMatch[1]!, {
       state: ctx.state,
       now: ctx.now,
@@ -266,7 +268,7 @@ export const parseCommand = (
     if (resolution.kind === "ambiguous") {
       return {
         kind: "clarify",
-        action: "focus",
+        action: highlighting ? "highlight" : "focus",
         candidates: resolution.candidates,
         prompt: "你想放大哪一个？",
       };
@@ -274,10 +276,10 @@ export const parseCommand = (
     return {
       kind: "envelope",
       actions: withAwaken(ctx, [
-        { type: "card.focus", targetId: resolution.card.id },
+        highlighting ? { type: "card.highlight", targetId: resolution.card.id, durationMs: 6000 } : { type: "card.focus", targetId: resolution.card.id },
       ]),
-      spokenText: `已聚焦${resolution.label}`,
-      description: `聚焦${resolution.label}`,
+      spokenText: `已${highlighting ? "高亮" : "聚焦"}${resolution.label}`,
+      description: `${highlighting ? "高亮" : "聚焦"}${resolution.label}`,
     };
   }
 
@@ -331,6 +333,7 @@ export const parseCommand = (
 /** The browser already has exact targets; don't ask an LLM to rediscover them. */
 export const fastLocalCommand = (text: string, ctx: CommandContext): CommandResult | null => {
   const result = parseCommand(text, ctx);
+  if (result.kind === "unknown" && result.message.startsWith("没有找到") && /^(?:删除|删掉|删了|删|移除|去掉|高亮|选中|取消.+(?:提醒|倒计时))/.test(text)) return result;
   if (result.kind === "unknown" && /^(?:请)?(?:把|将)?(?:第[一二两三四五六七八九十\d]+张)?待办.*(?:完成|未完成)|^(?:暂停|继续|恢复).*(?:提醒|倒计时)/.test(text)) return result;
   if (result.kind === "undo" || result.kind === "clarify") return result;
   return result.kind === "envelope" && !result.actions.some(action => action.type === "card.create") ? result : null;

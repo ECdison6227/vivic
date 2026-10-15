@@ -2,6 +2,7 @@ import type { CardRecord } from "@/contracts";
 import type { VivicState } from "@/state/canvasStore";
 import { zhToNumber } from "./zhNumber";
 import { completedCountdown } from "@/canvas/reminderPresentation";
+import { cardTitle } from "@/contracts";
 
 /**
  * Natural-language reference resolution (CARD_CONTRACT §4). Chinese-first
@@ -76,7 +77,7 @@ const positionOf = (
 
 const labelFor = (card: CardRecord, others: CardRecord[]): string => {
   const typeLabel = TYPE_LABEL[card.type];
-  const alias = card.metadata.aliases?.[0];
+  const alias = cardTitle(card).slice(0, 50);
   const pos = positionOf(card, others);
   const posLabel =
     others.length > 1
@@ -148,6 +149,16 @@ export const resolveReference = (
   const text = ref.trim();
 
   let pool = cards;
+
+  // Exact task/title matching only. A fuzzy name must never trigger deletion.
+  const name = text.replace(/(?:的)?(?:提醒|倒计时|卡片|便笺|便签|待办)(?:卡片|卡)?$/, "").replace(/[「」“”]/g, "");
+  const named = cards.filter(card => card.metadata.aliases?.includes(text) || card.metadata.aliases?.includes(name)
+    || (card.type === "CountdownCard" && card.sourceData.reminderText === name));
+  if (named.length) return named.length === 1
+    ? { kind: "unique", card: named[0]!, label: labelFor(named[0]!, cards) }
+    : { kind: "ambiguous", candidates: named.map(card => ({ card, label: labelFor(card, cards) })) };
+  if (/(?:提醒|倒计时)$/.test(text) && name && !/^(?:这|那|这个|那个|刚才|刚才那个|最近|左边|右边|中间|中央|第[一二两三四五六七八九十\d]+(?:个|张|条)?)(?:的)?$/.test(name)
+    && !/分(?:钟)?|秒/.test(name)) return { kind: "none", reason: `没有找到「${name}」提醒` };
 
   const typeHit = TYPE_KEYWORDS.find(([re]) => re.test(text));
   if (typeHit) pool = pool.filter((c) => c.type === typeHit[1]);
