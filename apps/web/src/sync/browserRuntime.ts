@@ -1,6 +1,9 @@
 import { createMemoryDB, openVivicDB, type VivicDB } from "@/persistence/db";
 import { createBroadcastSyncChannel } from "./channel";
 import { createControlHost, type ControlHost } from "./controlHost";
+import { resetLocalPreferences } from "@/ai/resetLocalPreferences";
+import { localSpeechModels } from "@/ai/localSpeech/modelManager";
+import { MODEL_IDS } from "@/ai/localSpeech/models";
 import {
   createDisplayClient,
   type DisplayClient,
@@ -21,7 +24,11 @@ export const getControlHost = (): Promise<ControlHost> => {
         db = createMemoryDB();
       }
       const channel = createBroadcastSyncChannel();
-      const host = createControlHost({ db, channel });
+      const host = createControlHost({ db, channel, onLocalDataReset: () => {
+        MODEL_IDS.forEach(id => localSpeechModels.cancelDownload(id));
+        void localSpeechModels.refresh().catch(() => undefined);
+        try { resetLocalPreferences(); } catch { /* Canvas state still refreshes if preferences storage is denied. */ }
+      } });
       await host.start();
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden) void host.checkReminders();

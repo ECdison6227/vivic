@@ -1,5 +1,5 @@
 import { newId } from "@/lib/id";
-import { fromCanvasRecord } from "@/persistence/canvasRecord";
+import { emptyVivicState, fromCanvasRecord } from "@/persistence/canvasRecord";
 import type { VivicDB } from "@/persistence/db";
 import { canvasStore, type CanvasStore } from "@/state/canvasStore";
 import type { SyncChannel } from "./channel";
@@ -56,7 +56,7 @@ export const createDisplayClient = (
 ): DisplayClient => {
   const store = deps.store ?? canvasStore;
   const instanceId = deps.instanceId ?? newId("display");
-  const pinned = deps.pinnedCanvasId ?? ANY_CANVAS;
+  let pinned = deps.pinnedCanvasId ?? ANY_CANVAS;
 
   let canvasId = "";
   let version: number | null = null;
@@ -70,6 +70,7 @@ export const createDisplayClient = (
   let lastOwnerSeenAt = 0;
   let pendingSnapshotAt = 0;
   let retryTimer: ReturnType<typeof setInterval> | null = null;
+  let stateGeneration = 0;
   const canInteract = () => !stopped && hydrated && !resyncing && ownerAlive &&
     Boolean(epoch) && Date.now() - lastOwnerSeenAt < 3600;
 
@@ -101,6 +102,7 @@ export const createDisplayClient = (
     if (ownerEpoch && msg.payload.ownerId && msg.payload.ownerId !== ownerEpoch) return;
     if (msg.payload.version !== msg.version) return;
     if (msg.canvasId === canvasId && msg.epoch === epoch && version !== null && msg.version < version) return;
+    stateGeneration++;
     store.setPreferences(msg.payload.preferences ?? DEFAULT_DISPLAY_PREFERENCES);
     store.loadState(msg.payload.vivicState);
     canvasId = msg.canvasId;
@@ -161,6 +163,17 @@ export const createDisplayClient = (
   const unsubscribeChannel = deps.channel.subscribe((msg) => {
     if (stopped) return;
     switch (msg.type) {
+      case "local-data-reset": {
+        if (ownerEpoch && msg.payload.ownerId !== ownerEpoch) return;
+        stateGeneration++;
+        if (pinned) pinned = msg.canvasId;
+        canvasId = msg.canvasId; version = null; lastSeq = null; epoch = "";
+        ownerEpoch = msg.payload.ownerId;
+        hydrated = false; resyncing = false;
+        store.setPreferences(DEFAULT_DISPLAY_PREFERENCES); store.loadState(emptyVivicState());
+        requestSnapshot(canvasId);
+        return;
+      }
       case "activity": {
         if (!hydrated || msg.canvasId !== canvasId || msg.epoch !== epoch) return;
         const { activity, requestId } = msg.payload;
@@ -206,8 +219,16 @@ export const createDisplayClient = (
 
   const start = async () => {
     if (pinned && deps.db) {
-      const rec = await deps.db.getCanvas(pinned);
-      if (rec && !stopped && !epoch) {
+      const hydrationGeneration = stateGeneration;
+      let rec = await deps.db.getCanvas(pinned);
+      if (!rec && !stopped && !epoch && hydrationGeneration === stateGeneration) {
+        const fallback = await deps.db.getMeta("lastCanvasId");
+        if (fallback) {
+          rec = await deps.db.getCanvas(fallback);
+          if (rec && hydrationGeneration === stateGeneration) pinned = rec.id;
+        }
+      }
+      if (rec && !stopped && !epoch && hydrationGeneration === stateGeneration) {
         store.loadState(fromCanvasRecord(rec));
         canvasId = rec.id;
         version = rec.version;

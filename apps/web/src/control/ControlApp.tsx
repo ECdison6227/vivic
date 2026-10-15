@@ -532,7 +532,7 @@ const ControlShell = (props: ShellProps) => {
 
         <RemindersSection host={props.host} readonly={readonly} />
 
-        <DataActions host={props.host} readonly={readonly} />
+        <DataActions host={props.host} readonly={readonly || !snap.ready} onBeforeClear={props.onCancel} />
       </div>
     </div>
   );

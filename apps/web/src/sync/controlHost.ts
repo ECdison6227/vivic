@@ -68,6 +68,7 @@ export interface ControlHostDeps {
   autosaveMs?: number;
   reminderPollMs?: number;
   now?: () => number;
+  onLocalDataReset?: () => void;
 }
 
 export interface ControlHost {
@@ -85,6 +86,7 @@ export interface ControlHost {
   deleteCanvas: (id: string) => void;
   switchCanvas: (id: string) => void;
   clearActiveCanvas: () => void;
+  clearLocalData: (beforeClear?: () => Promise<void>) => Promise<DispatchResult>;
   exportActiveCanvas: () => string;
   importCanvas: (text: string) => { ok: boolean; error?: string; id?: string };
   takeover: () => void;
@@ -111,7 +113,8 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
   let stopped = false;
   let reminderTimer: ReturnType<typeof setInterval> | null = null;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  let checkingReminders = false;
+  let reminderCheck: Promise<void> | null = null;
+  let clearingLocalData = false;
   let reminderNotices: ReminderNotice[] = [];
   let reminderError: string | null = null;
   let ownerResyncing = false;
@@ -130,7 +133,8 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     void next.catch(() => { reminderError = "本地保存失败，请保留控制页后重试。"; emit(); });
     return next;
   };
-  const writable = () => ready && !stopped && !ownerResyncing && owner.mode() === "owner";
+  const canPersist = () => ready && !stopped && !ownerResyncing && owner.mode() === "owner";
+  const writable = () => canPersist() && !clearingLocalData;
 
   const getReminders = (): ReminderSummary[] => [...records.values()].flatMap(record => {
     const cards = record.id === activeCanvasId
@@ -156,7 +160,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
   const emit = () => {
     uiSnapshot = {
       preferences,
-      ready: ready && !ownerResyncing,
+      ready: ready && !ownerResyncing && !clearingLocalData,
       ownerMode: owner.mode(),
       canvases: [...records.values()]
         .map(({ id, title, version, updatedAt }) => ({
@@ -308,6 +312,11 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
 
   const unsubscribeChannel = deps.channel.subscribe((msg) => {
     if (stopped) return;
+    if (msg.type === "local-data-reset" && owner.mode() === "readonly") {
+      deps.onLocalDataReset?.();
+      void refreshOwnerState(true);
+      return;
+    }
     if (msg.type === "hello" && msg.payload.role === "display") {
       postSnapshot(msg.canvasId || activeCanvasId || "");
       return;
@@ -347,7 +356,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     records.set(canvasId, record);
     emit();
     void queueWrite(async () => {
-      if (!writable()) return;
+      if (!canPersist()) return;
       await deps.db.putCanvas(record);
       persistedVersions.set(record.id, record.version);
       // Persist first, then send the exact confirmed revision; a newer queued
@@ -372,7 +381,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     emit();
     const confirmed = preferences;
     void queueWrite(async () => {
-      if (!writable()) return;
+      if (!canPersist()) return;
       await deps.db.setMeta("displayPreferences", JSON.stringify(confirmed));
       persistedPreferences = confirmed;
       if (writable() && preferences === confirmed) records.forEach(record => postSnapshot(record.id));
@@ -389,7 +398,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     const record = toCanvasRecord(canvasId, meta.title, meta.version + 1, next);
     records.set(canvasId, record); emit();
     void queueWrite(async () => {
-      if (!writable()) return;
+      if (!canPersist()) return;
       await deps.db.putCanvas(record); persistedVersions.set(canvasId, record.version);
       if (writable() && records.get(canvasId)?.version === record.version) postSnapshot(canvasId);
     });
@@ -445,7 +454,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
           };
           records.set(action.canvasId, record);
           void queueWrite(async () => {
-            if (!writable()) return;
+            if (!canPersist()) return;
             await deps.db.putCanvas(record); persistedVersions.set(record.id, record.version);
           });
           emit();
@@ -531,7 +540,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     activeCanvasId = id;
     store.loadState(restoredState(record));
     void queueWrite(async () => {
-      if (writable()) await deps.db.setMeta("lastCanvasId", activeCanvasId ?? id);
+      if (canPersist()) await deps.db.setMeta("lastCanvasId", activeCanvasId ?? id);
     });
     emit();
     // Unpinned displays follow the owner's active canvas.
@@ -558,7 +567,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     records.set(id, meta);
     if (id === activeCanvasId) scheduleAutosave();
     else void queueWrite(async () => {
-      if (!writable()) return;
+      if (!canPersist()) return;
       await deps.db.putCanvas(meta); persistedVersions.set(meta.id, meta.version);
     });
     emit();
@@ -570,7 +579,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     if (!records.has(id)) return;
     records.delete(id);
     void queueWrite(async () => {
-      if (!writable()) return;
+      if (!canPersist()) return;
       await deps.db.deleteCanvas(id); persistedVersions.delete(id);
     });
     if (id === activeCanvasId) {
@@ -593,7 +602,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
         };
         records.set(freshId, fresh);
         void queueWrite(async () => {
-          if (!writable()) return;
+          if (!canPersist()) return;
           await deps.db.putCanvas(fresh); persistedVersions.set(fresh.id, fresh.version);
         });
         activeCanvasId = null;
@@ -612,6 +621,42 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     records.set(activeCanvasId, { ...meta, version: meta.version + 1, updatedAt: new Date().toISOString() });
     void saveActiveNow().catch(() => undefined);
     postSnapshot(activeCanvasId); // displays replace state, no replay
+  };
+
+  const clearLocalData: ControlHost["clearLocalData"] = async beforeClear => {
+    if (!writable()) return { ok: false, error: "readonly-not-owner" };
+    const acceptedEpoch = sessionEpoch;
+    if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+    // Save accepted edits before blocking new ones; a cache failure must not
+    // discard a just-created canvas, rename, position or preference change.
+    const acceptedSave = saveActiveNow();
+    clearingLocalData = true; emit();
+    const stillOwner = () => !stopped && owner.mode() === "owner" && sessionEpoch === acceptedEpoch;
+    try {
+      // Drain both queued saves and a scheduler's direct inbox transaction.
+      await acceptedSave; await persistence; await reminderCheck;
+      if (!stillOwner()) return { ok: false, error: "readonly-not-owner" };
+      await beforeClear?.();
+      if (!stillOwner()) return { ok: false, error: "readonly-not-owner" };
+      const fresh = toCanvasRecord(newId("canvas"), "默认画布", 0, emptyVivicState());
+      await deps.db.reset(fresh);
+      if (!stillOwner()) return { ok: false, error: "readonly-not-owner" };
+      records.clear(); records.set(fresh.id, fresh);
+      persistedVersions.clear(); persistedVersions.set(fresh.id, 0);
+      repairedFitRequests.clear(); seqByCanvas.clear();
+      activeCanvasId = fresh.id;
+      reminderNotices = []; reminderError = null;
+      preferences = { ...DEFAULT_DISPLAY_PREFERENCES }; persistedPreferences = preferences;
+      store.setPreferences(preferences); store.loadState(emptyVivicState());
+      sessionEpoch = newId("owner");
+      deps.channel.post({ ...baseMsg(fresh.id, 0), type: "local-data-reset", payload: { ownerId: instanceId } });
+      return { ok: true, deduplicated: false };
+    } catch {
+      return { ok: false, error: "清除未完成，请检查本地存储后重试。" };
+    } finally {
+      clearingLocalData = false; emit();
+      if (writable() && activeCanvasId) postSnapshot(activeCanvasId);
+    }
   };
 
   const exportActiveCanvas = (): string => {
@@ -635,7 +680,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     if (hasUnpinnedOverlap(imported.cards)) record = toCanvasRecord(id, record.title, record.version, { ...imported, cards: relayout(imported.cards) });
     records.set(id, record);
     void queueWrite(async () => {
-      if (!writable()) return;
+      if (!canPersist()) return;
       await deps.db.putCanvas(record); persistedVersions.set(record.id, record.version);
     });
     emit();
@@ -660,7 +705,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
   };
 
   // ----------------------------------------------------------------- lifecycle
-  async function refreshOwnerState() {
+  async function refreshOwnerState(allowReadonly = false) {
     ownerResyncing = true;
     let restored = false;
     emit();
@@ -669,13 +714,14 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
       const last = await deps.db.getMeta("lastCanvasId");
       const inbox = await deps.db.getMeta("reminderInbox");
       await loadPreferences();
-      if (stopped || owner.mode() !== "owner") return;
+      if (stopped || (!allowReadonly && owner.mode() !== "owner")) return;
       records.clear();
       all.forEach(record => records.set(record.id, record));
       persistedVersions.clear();
       all.forEach(record => persistedVersions.set(record.id, record.version));
       activeCanvasId = last && records.has(last) ? last : all[0]?.id ?? null;
       if (activeCanvasId) store.loadState(restoredState(records.get(activeCanvasId)!));
+      reminderNotices = [];
       if (inbox) {
         const parsed = ReminderInboxSchema.safeParse(JSON.parse(inbox));
         if (parsed.success) reminderNotices = parsed.data;
@@ -691,9 +737,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     }
   }
 
-  const checkReminders = async () => {
-    if (!ready || stopped || ownerResyncing || owner.mode() !== "owner" || checkingReminders) return;
-    checkingReminders = true;
+  const runReminderCheck = async () => {
     try {
       await persistence;
       if (!writable()) return;
@@ -709,11 +753,11 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
       if (fresh.length) {
         const next = [...reminderNotices, ...fresh].slice(-50);
         await deps.db.setMeta("reminderInbox", JSON.stringify(next));
-        if (stopped || owner.mode() !== "owner") return;
+        if (!writable()) return;
         reminderNotices = next;
       }
       for (const item of due) {
-        if (stopped || owner.mode() !== "owner") return;
+        if (!writable()) return;
         // The user may delete, pause or reschedule while persistence awaits.
         const current = getReminders().find(r => r.canvasId === item.canvasId && r.card.id === item.card.id);
         if (!current || current.card.sourceData.targetAt !== item.card.sourceData.targetAt || !isDue(current.card, now())) continue;
@@ -734,7 +778,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
           };
           records.set(item.canvasId, updated);
           await queueWrite(async () => {
-            if (!writable()) return;
+            if (!canPersist()) return;
             await deps.db.putCanvas(updated); persistedVersions.set(updated.id, updated.version);
           });
           if (records.get(item.canvasId) === updated) postSnapshot(item.canvasId);
@@ -759,9 +803,13 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     } catch {
       reminderError = "提醒记录暂时无法保存，请保留控制页并检查本地存储。";
       emit();
-    } finally {
-      checkingReminders = false;
     }
+  };
+
+  const checkReminders = (): Promise<void> => {
+    if (!writable() || reminderCheck) return reminderCheck ?? Promise.resolve();
+    reminderCheck = runReminderCheck().finally(() => { reminderCheck = null; });
+    return reminderCheck;
   };
 
   const start = async () => {
@@ -835,6 +883,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     deleteCanvas,
     switchCanvas,
     clearActiveCanvas,
+    clearLocalData,
     exportActiveCanvas,
     importCanvas,
     takeover: () => owner.takeover(),

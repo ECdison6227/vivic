@@ -5,7 +5,6 @@ import { runIntent } from "../../../local-api/src/intent/pipeline";
 import { CredentialStore } from "../../../local-api/src/credentials";
 import { activeCanvasId, sendCommand } from "./helpers1";
 
-const evidence = path.resolve(process.cwd(), "../../evidence/next-iteration-data-input");
 test.use({ video: { mode: "on", size: { width: 1440, height: 900 } } });
 
 test.beforeEach(async ({ page, context }) => {
@@ -34,7 +33,8 @@ test.beforeEach(async ({ page, context }) => {
   await expect(page.locator("[data-vivic-control]")).toHaveAttribute("data-vivic-owner", "owner");
 });
 
-test("上海天气 gives visible choices and creates sourced weather after selection", async ({ page, context }) => {
+test("上海天气 gives visible choices and creates sourced weather after selection", async ({ page, context }, testInfo) => {
+  const evidence = path.resolve(process.cwd(), "../../evidence/next-iteration-data-input", testInfo.project.name || "chromium");
   const display = await context.newPage();
   await display.goto(`/display?canvasId=${await activeCanvasId(page)}`);
   await sendCommand(page, "上海天气");
@@ -42,6 +42,7 @@ test("上海天气 gives visible choices and creates sourced weather after selec
   await expect(display.locator("[data-vivic-subtitle]")).toContainText("多个同名");
   await expect(display.locator("[data-vivic-thinking]")).toHaveCount(0);
   await expect(display.locator(".vivic-card")).toHaveCount(0);
+  await page.locator("[data-vivic-data-suggestions]").scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(evidence, "TEST-weather-choice.png") });
   await page.getByRole("button", { name: "上海,上海市天气", exact: true }).click();
   await expect(page.locator("[data-vivic-command-feedback]")).toHaveText("已显示上海当前天气");
@@ -52,10 +53,12 @@ test("上海天气 gives visible choices and creates sourced weather after selec
   await display.reload();
   await expect(display.locator(".vivic-card")).toHaveText("22.4°C");
   await display.screenshot({ path: path.join(evidence, "TEST-weather-result.png") });
-  await display.close();
+  const video = display.video(); await display.close();
+  if (video) await video.saveAs(path.join(evidence, "TEST-weather-flow.webm"));
 });
 
-test("table request asks for data in both windows and accepts a bare numeric reply", async ({ page, context }) => {
+test("table request asks for data in both windows and accepts a bare numeric reply", async ({ page, context }, testInfo) => {
+  const evidence = path.resolve(process.cwd(), "../../evidence/next-iteration-data-input", testInfo.project.name || "chromium");
   const display = await context.newPage();
   await display.goto(`/display?canvasId=${await activeCanvasId(page)}`);
   await sendCommand(page, "给我创建一个表格");
@@ -69,7 +72,8 @@ test("table request asks for data in both windows and accepts a bare numeric rep
   await expect(display.locator("[data-vivic-data-table] tbody tr").nth(1)).toHaveText("周二5");
   await expect(page.locator("[data-vivic-command-cancel]")).toHaveCount(0);
   await display.screenshot({ path: path.join(evidence, "TEST-table-result.png") });
-  await display.close();
+  const video = display.video(); await display.close();
+  if (video) await video.saveAs(path.join(evidence, "TEST-table-flow.webm"));
 });
 
 test("a new command after a data question is independent; errors also reach Display", async ({ page, context }) => {

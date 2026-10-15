@@ -52,6 +52,10 @@ const msgBase = {
 
 export const SyncMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({
+    ...msgBase, type: z.literal("local-data-reset"), canvasId: z.string().min(1).max(128),
+    payload: z.strictObject({ ownerId: z.string().min(1).max(64) }),
+  }),
+  z.strictObject({
     ...msgBase, type: z.literal("interaction"),
     payload: z.strictObject({ ownerEpoch: z.string().min(1).max(64),
       // Display is allowed to request a move only. Pin/settings stay Control-only.

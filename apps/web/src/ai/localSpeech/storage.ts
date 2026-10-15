@@ -70,6 +70,10 @@ export class IndexedDbModelStorage implements ModelStorage {
   }
   delete(id?: ModelId) {
     return this.transact("readwrite", async tx => {
+      if (!id) {
+        await request(tx.objectStore("models").clear());
+        await request(tx.objectStore("leases").clear());
+      }
       const requests = (id ? [id] : MODEL_IDS).flatMap(key => [
         request(tx.objectStore("leases").put(crypto.randomUUID(), key)),
         request(tx.objectStore("models").delete(key)),

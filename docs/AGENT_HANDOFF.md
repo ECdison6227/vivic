@@ -8,7 +8,7 @@
 
 用户要求先完成主线开发，再统一调整体验。最近重点是卡片重叠、三事项提醒、思考反馈、音色、本地识别/唤醒以及只提供 StepFun Coding Plan 和 GPT/Pi 两种决策连接。本轮已落地这些主线，但 [交付中的未完表](DELIVERY.md) 仍明确保留实验、未实现细节和现场验收。
 
-最新用户要求：告诉他测试输入、还剩什么、写好交付、建立 Git 分支管理，便于换 Agent。用户手动测试反馈到来后，优先按原话复现，再小步修复。
+最新用户要求：在 `agent/next-iteration` 修复实际反馈，再继续未完计划。用户最终更正为「上海天气」「给我创建一个表格」思考结束后没有卡片/解释，不是待办问题。已补齐数据澄清的展示字幕、真实地点选项、天气/表格续答；已继续完成统一清除本地数据入口。增量详情与最新检查见 [next-iteration.md](next-iteration.md)，下文原交接验证数字保留为历史基线。
 
 ## 不可遗失的约束
 
@@ -29,6 +29,7 @@
 - 交接检查时 StepFun 和 GPT 均连接，当前 StepFun `step-3.5-flash`，GPT `gpt-6-luna`。这是易失进程状态，后端重载会清空连接；不要反复要求用户发送 Key。GPT 可通过 Control「使用本机 Pi 登录」恢复现有授权。
 - StepFun 默认 3.5 不按视觉处理。图片须选实际支持视觉的模型，例如目录中有权限的 3.7 flash/5 preview，或已验证 GPT。
 - 云语音仅走 Plan 路径；不静默 fallback 到普通按量计费 API。
+- 本次增量修改已触发 API watch 热重载；随后只读状态检查确认 StepFun/GPT 进程连接均已断开。上面的双连接是原交接时点。Pi 安全存储未注销；用户可复用本机 Pi 登录，StepFun 在 Control 重连，不从文件或聊天恢复 Key。
 
 ## 代码导航
 
@@ -46,6 +47,7 @@
 | 图片 | `ai/attachments.ts`、`control/ImageAttachment.tsx`、API `images.ts`/`imageDecoder.ts`：4MiB/16MP/8192 边上限，Sharp 全像素解码，当前请求内存附件 |
 | 本地语音 | `ai/localSpeech/**`、`control/LocalSpeechSettings.tsx`/`LocalWakeInput.tsx`；固定模型 manifest，按需下载/SHA/取消/清理，显式前台单句；不是后台常驻唤醒 |
 | 语音与提醒 | `ai/speech.ts`/`voiceInput.ts`、`reminders/**`、API `stepfun/**`；实际播放状态驱动反馈，预录音/逐词时间线尚未做 |
+| 统一清除 | `control/DataActions.tsx`、`sync/controlHost.ts` 的 `clearLocalData()`、`persistence/db.ts` 的原子 reset；`local-data-reset` 通知已打开窗口，清除前取消在途请求和语音；后端账号/Pi 存储不动 |
 
 完整模块说明在 `docs/`，许可证及固定来源在根 `LICENSES.md`。
 
@@ -67,7 +69,7 @@
 
 1. 接收 [人工清单](MANUAL_TEST.md) 的真实反馈，优先修复错删、事项遗漏、数值错误、重叠/丢卡及连接权限问题；不要先增加接入方式。
 2. 安排本人语音/默认唤醒词及物理 Safari/外接屏验收；自动化仍静音。新 GPT 登录只在用户确实要新登录时完整走原 Pi 流程。
-3. 继续原计划未完细节：合法预录短反馈、统一「清除本地数据」入口；随后按需求决定更复杂提醒。音色克隆/指定输出设备等未实现，不要暗示已可用。
+3. 统一「清除本地数据」入口已完成，不要重复开发。继续合法预录短反馈、逐词时间线/振幅反馈；随后按需求决定更复杂提醒。音色克隆/指定输出设备等未实现，不要暗示已可用。
 4. Laya 先复现上游/模型/适配差异再判断；Winnow 先确定准确项目。当前规则 → StepFun/GPT 已可用，不用阻塞其余体验修复。
 5. 最终代码再做一次完整长期/不录屏性能基线，排查 Firefox 诊断。不要自动删除以前失败记录。
 

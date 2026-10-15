@@ -110,6 +110,14 @@ export const setSpeechEnabled = (enabled: boolean): void => {
   if (snapshot.enabled !== enabled) update({ enabled });
 };
 
+/** Clear only Vivic's public voice preferences; never touch account storage. */
+export const resetSpeechPreferences = (): void => {
+  cancelSpeech();
+  localStorage.removeItem(SPEECH_PREFERENCES_STORAGE_KEY);
+  seen.clear();
+  update({ enabled: false, preferences: { ...DEFAULT_PREFERENCES }, preferenceError: null });
+};
+
 /** Invalid values are rejected; storage denial leaves the settings usable in memory. */
 export const setSpeechPreferences = (patch: Partial<SpeechPreferences>): boolean => {
   if ((patch.voice !== undefined && !isVoice(patch.voice)) ||

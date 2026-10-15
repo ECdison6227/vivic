@@ -14,6 +14,8 @@ export interface VivicDB {
   deleteCanvas: (id: string) => Promise<void>;
   getMeta: (key: string) => Promise<string | undefined>;
   setMeta: (key: string, value: string) => Promise<void>;
+  /** Atomically replace all app records and metadata with one empty canvas. */
+  reset: (fresh: CanvasRecord) => Promise<void>;
   close: () => void;
 }
 
@@ -54,6 +56,12 @@ export const createMemoryDB = (): VivicDB => {
     getMeta: async (key) => meta.get(key),
     setMeta: async (key, value) => {
       meta.set(key, value);
+    },
+    reset: async fresh => {
+      const record = CanvasRecordSchema.parse(fresh);
+      canvases.clear(); meta.clear();
+      canvases.set(record.id, structuredClone(record));
+      meta.set("lastCanvasId", record.id);
     },
     close: () => undefined,
   };
@@ -109,6 +117,15 @@ export const openVivicDB = (): Promise<VivicDB> =>
         async setMeta(key, value) {
           const tx = db.transaction("meta", "readwrite");
           tx.objectStore("meta").put({ key, value });
+          await txDone(tx);
+        },
+        async reset(fresh) {
+          const record = CanvasRecordSchema.parse(fresh);
+          const tx = db.transaction(["canvases", "meta"], "readwrite");
+          tx.objectStore("canvases").clear();
+          tx.objectStore("meta").clear();
+          tx.objectStore("canvases").put(record);
+          tx.objectStore("meta").put({ key: "lastCanvasId", value: record.id });
           await txDone(tx);
         },
         close() {

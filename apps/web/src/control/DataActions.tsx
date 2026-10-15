@@ -2,15 +2,32 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { ControlHost } from "@/sync/controlHost";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { localSpeechModels } from "@/ai/localSpeech/modelManager";
+import { resetLocalPreferences } from "@/ai/resetLocalPreferences";
 
 interface DataActionsProps {
   host: ControlHost;
   readonly: boolean;
+  onBeforeClear: () => void;
 }
 
-export const DataActions = ({ host, readonly }: DataActionsProps) => {
+export const DataActions = ({ host, readonly, onBeforeClear }: DataActionsProps) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const disabled = readonly || clearing;
+
+  const clearLocalData = async () => {
+    if (disabled) return;
+    setClearing(true); onBeforeClear();
+    try {
+      const result = await host.clearLocalData(async () => {
+        await localSpeechModels.clearModelCache();
+        resetLocalPreferences();
+      });
+      setMessage(result.ok ? "已清除全部画布、提醒记录、偏好和语音模型缓存。" : result.error);
+    } finally { setClearing(false); }
+  };
 
   const exportJson = () => {
     const json = host.exportActiveCanvas();
@@ -91,6 +108,14 @@ export const DataActions = ({ host, readonly }: DataActionsProps) => {
             e.target.value = "";
           }}
         />
+      </div>
+      <div className="mt-3 border-t border-neutral-100 pt-3">
+        <ConfirmDialog title="清除全部本地数据？"
+          description="删除本浏览器内的全部画布、提醒记录、显示和语音偏好，以及已下载的语音模型。此操作无法撤销，请先导出需要保留的画布。账号连接保留。"
+          confirmLabel="清除全部" disabled={disabled} onConfirm={() => void clearLocalData()}
+          trigger={<Button variant="destructive" size="sm" disabled={disabled} data-vivic-clear-local-data>
+            {clearing ? "正在清除…" : "清除全部本地数据"}
+          </Button>} />
       </div>
       <p className="mt-3 min-h-4 text-xs text-neutral-500" aria-live="polite" data-vivic-data-feedback>
         {message ?? "数据只保存在本机（IndexedDB），不含任何密钥。"}

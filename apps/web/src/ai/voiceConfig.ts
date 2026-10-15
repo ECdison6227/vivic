@@ -2,7 +2,8 @@ export type SttProvider = "stepfun" | "local" | "none";
 export type TtsProvider = "stepfun" | "browser" | "none";
 interface VoiceConfiguration { stt: SttProvider; tts: TtsProvider; browserVoice: string; }
 const key = "vivic.voice.providers.v1";
-let state: VoiceConfiguration = { stt: "stepfun", tts: "stepfun", browserVoice: "" };
+const defaults: VoiceConfiguration = { stt: "stepfun", tts: "stepfun", browserVoice: "" };
+let state: VoiceConfiguration = { ...defaults };
 try {
   const value: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
   if (value && typeof value === "object") {
@@ -14,6 +15,12 @@ try {
 const listeners = new Set<() => void>();
 export const getVoiceConfiguration = () => state;
 export const subscribeVoiceConfiguration = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+export const resetVoiceConfiguration = () => {
+  window.dispatchEvent(new Event("vivic:voice-config-change"));
+  localStorage.removeItem(key);
+  state = { ...defaults };
+  listeners.forEach(listener => listener());
+};
 export const setVoiceConfiguration = (patch: Partial<VoiceConfiguration>) => {
   if ((patch.stt !== undefined && !["stepfun", "local", "none"].includes(patch.stt)) ||
     (patch.tts !== undefined && !["stepfun", "browser", "none"].includes(patch.tts))) return;
