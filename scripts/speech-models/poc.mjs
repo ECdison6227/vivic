@@ -12,14 +12,19 @@ const require = createRequire(path.join(web, "package.json"));
 const { build } = await import(require.resolve("vite"));
 const { chromium } = require("@playwright/test");
 const owned = path.join(root, ".cache/sherpaw-poc");
-const outDir = path.join(owned, "browser-build");
+const defaultWake = process.argv.includes("--default-wake");
+const defaultWakeOut = path.join(root, "evidence/next-plan", `default-wake-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+if (defaultWake) await mkdir(defaultWakeOut, { recursive: true });
+const silenceSeconds = Number(process.argv.find(arg => arg.startsWith("--silence-seconds="))?.split("=")[1] ?? 0);
+if (!Number.isFinite(silenceSeconds) || silenceSeconds < 0 || silenceSeconds > 300) throw new Error("Invalid silence seconds");
+const outDir = path.join(owned, defaultWake ? "default-wake-browser-build" : "browser-build");
 const manifest = JSON.parse(await readFile(path.join(web, "public/models/sherpaw-manifest.json"), "utf8"));
 await mkdir(owned, { recursive: true });
 // Isolated production build. Never changes the app's Vite configuration or dist.
 await build({ configFile: false, root: web, publicDir: false, cacheDir: path.join(owned, "vite-cache"),
   resolve: { alias: { "@": path.join(web, "src") } },
   build: { outDir, emptyOutDir: true, target: "es2023", reportCompressedSize: false,
-    rollupOptions: { input: path.join(web, "src/ai/localSpeech/__tests__/browserHarness.ts"), output: { entryFileNames: "harness.js" } },
+    rollupOptions: { input: path.join(web, `src/ai/localSpeech/__tests__/${defaultWake ? "defaultWakeHarness" : "browserHarness"}.ts`), output: { entryFileNames: "harness.js" } },
   },
 });
 const fixture = path.join(root, "evidence/phase2-voice-input/synthetic-command.wav");
@@ -31,9 +36,10 @@ const server = createServer(async (request, response) => {
   }
   const model = manifest.models.find(model => pathname === `/__local-speech-model/${model.id}`);
   const worklet = path.join(web, "public/audio-capture-worklet.js");
-  const file = model ? path.join(owned, "models", `${model.id}.bin`) : pathname === "/__local-speech-fixture.wav" ? fixture
-    : pathname === "/audio-capture-worklet.js" ? worklet : path.resolve(outDir, `.${pathname}`);
-  if (!model && file !== fixture && file !== worklet && !file.startsWith(outDir + path.sep)) { response.writeHead(403); response.end(); return; }
+  const wakeFixture = /^\/__wake-fixture\/(?:wake|command)-(?:3|6|9)\.wav$/.test(pathname) ? path.join(root, "evidence/next-plan/wake-fixtures", path.basename(pathname)) : null;
+  const file = wakeFixture ?? (model ? path.join(owned, "models", `${model.id}.bin`) : pathname === "/__local-speech-fixture.wav" ? fixture
+    : pathname === "/audio-capture-worklet.js" ? worklet : path.resolve(outDir, `.${pathname}`));
+  if (!model && !wakeFixture && file !== fixture && file !== worklet && !file.startsWith(outDir + path.sep)) { response.writeHead(403); response.end(); return; }
   const extension = path.extname(file);
   const contentType = { ".js": "text/javascript", ".wasm": "application/wasm", ".wav": "audio/wav", ".json": "application/json" }[extension] ?? "application/octet-stream";
   response.setHeader("Access-Control-Allow-Origin", "*");
@@ -92,18 +98,18 @@ const readSystem = key => { try { return execFileSync("sysctl", ["-n", key], { e
 let report;
 try {
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: "load" });
-  await page.waitForFunction(() => typeof window.runLocalSpeechPoc === "function");
-  report = await page.evaluate(() => window.runLocalSpeechPoc());
+  await page.waitForFunction(wake => typeof window[wake ? "runDefaultWakePoc" : "runLocalSpeechPoc"] === "function", defaultWake);
+  report = defaultWake ? await page.evaluate(seconds => window.runDefaultWakePoc(seconds), silenceSeconds) : await page.evaluate(() => window.runLocalSpeechPoc());
   report = { ...report, browserErrors, network, port, resources,
     machine: { cpu: readSystem("machdep.cpu.brand_string"), memoryBytes: readSystem("hw.memsize") },
     note: "Production bundle; synthetic WAV only. RSS/%CPU snapshots are browser process samples, not a sustained performance guarantee.",
   };
-  await writeFile(path.join(owned, "browser-result.json"), JSON.stringify(report, null, 2));
+  await writeFile(defaultWake ? path.join(defaultWakeOut, "report.json") : path.join(owned, "browser-result.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, (key, value) => ["network", "resources"].includes(key) ? `[${value.length} records]` : value, 2));
   if (!report.ok || browserErrors.length) process.exitCode = 1;
 } catch (error) {
   console.error("POC_FAILURE", error);
-  await writeFile(path.join(owned, "browser-failure.json"), JSON.stringify({ error: String(error), browserErrors, network, resources }, null, 2));
+  await writeFile(defaultWake ? path.join(defaultWakeOut, "failure.json") : path.join(owned, "browser-failure.json"), JSON.stringify({ error: String(error), browserErrors, network, resources }, null, 2));
   process.exitCode = 1;
 } finally {
   clearInterval(timer); await context.close().catch(() => {}); await browser.close().catch(() => {});

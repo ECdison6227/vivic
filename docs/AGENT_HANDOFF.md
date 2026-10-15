@@ -12,6 +12,14 @@
 
 随后用户继续原计划，已实现[固定预录短反馈、逐词字幕、PCM 振幅](voice-feedback.md)。预录素材已随仓库附许可/散列；生成与测试没有播放扬声器或开麦。真实 StepFun 词轴及听感仍待验收，不要重复开发或误称实际套餐已测。
 
+## 本轮剩余计划的最新状态
+
+已继续完成[剩余计划实现](remaining-plan.md)：浏览器精确操作不走 LLM；日期/重复/画布条件提醒；固定公网 DNS 备选和真实正文读取；可选 Kev-0.8B 准备/启用/停止/清理；输出设备选择、静音通知、已有 File ID 的 Plan 音色复刻；WebKit Blob 缓存回退。模型与权限测试仍不播放、不采集真实麦克风。
+
+Winnow 已定位为 [EldanRing/Winnow-E4B](https://huggingface.co/EldanRing/Winnow-E4B)，8.01GB Q8 不适合当前 8GB M1；不再向用户追问项目链接。采用用户允许的 [Kev](local-decision.md)，原始中文正确率 68.89%，必须保留默认关闭和严格放弃策略，不把实验改称通用可靠路由。模型不是第三种远程聊天 LLM。
+
+最终验证摘要见 `docs/verification/next-plan.json`；旧阶段数字与旧失败记录仅保留为历史事实。后续只处理真实测试反馈和外部验收，不重写这些模块。
+
 ## 不可遗失的约束
 
 - 中文沟通，直接推进已授权工作。不要让用户反复说「继续」，也不要假称启动了子代理。此前子代理均已完成并关闭，没有后台在途实现任务。
@@ -31,7 +39,7 @@
 - 交接检查时 StepFun 和 GPT 均连接，当前 StepFun `step-3.5-flash`，GPT `gpt-6-luna`。这是易失进程状态，后端重载会清空连接；不要反复要求用户发送 Key。GPT 可通过 Control「使用本机 Pi 登录」恢复现有授权。
 - StepFun 默认 3.5 不按视觉处理。图片须选实际支持视觉的模型，例如目录中有权限的 3.7 flash/5 preview，或已验证 GPT。
 - 云语音仅走 Plan 路径；不静默 fallback 到普通按量计费 API。
-- 本次增量修改已触发 API watch 热重载；随后只读状态检查确认 StepFun/GPT 进程连接均已断开。上面的双连接是原交接时点。Pi 安全存储未注销；用户可复用本机 Pi 登录，StepFun 在 Control 重连，不从文件或聊天恢复 Key。
+- 本次增量曾触发 API watch 热重载，StepFun 内存 Key 已断开，不能从文件或聊天恢复。收尾已通过应用既有接口复用 Pi 授权恢复 GPT（gpt-6-luna），未新开 OAuth，也未更改原模型选择。连接是易失状态；StepFun 在 Control 重连。
 
 ## 代码导航
 
@@ -45,6 +53,7 @@
 | 主题 | `sync/protocol.ts` 的可选 dayStart/dayEnd，旧记录兼容；`motion/motionDirector.ts`、`stage/StageRoot.tsx`；默认 07:00–19:00、跨夜/分钟边界/隐藏恢复 |
 | 卡片 | `cards/*CardView.tsx`，Recharts + styled Table；真实天气来源链接和 Radix HoverCard；负数 pie 不伪造比例 |
 | GPT / Pi | `apps/local-api/src/gpt/**`、`PROVENANCE.md`：Pi 1.2.0，OAuth-only AuthStorage，public/legacy 路由区分；目录上限 4MiB、推理/搜索 512KiB；完整 SSE completed 才接受结果 |
+| 本地决策 | `local-api/src/decision/`、`scripts/decision-model/`；固定 Kev 选择评分器、离线加载、超时放弃，默认关闭；见 [决策说明](local-decision.md) |
 | 数据与搜索 | `local-api/src/data/**`、`search/**`、`intent/searchSummary.ts`；数值来自明确输入或既有数据，比较摘要只能引用已有证据 |
 | 图片 | `ai/attachments.ts`、`control/ImageAttachment.tsx`、API `images.ts`/`imageDecoder.ts`：4MiB/16MP/8192 边上限，Sharp 全像素解码，当前请求内存附件 |
 | 本地语音 | `ai/localSpeech/**`、`control/LocalSpeechSettings.tsx`/`LocalWakeInput.tsx`；固定模型 manifest，按需下载/SHA/取消/清理，显式前台单句；不是后台常驻唤醒 |
@@ -53,7 +62,11 @@
 
 完整模块说明在 `docs/`，许可证及固定来源在根 `LICENSES.md`。
 
-## 回归事实与限制
+## 最新验证
+
+[最终增量摘要](verification/next-plan.json)：Web 354 + API 855 = 1,209 项通过，3 项外部条件跳过；类型/构建通过。Chromium 原全套 71/73 的两个旧断言在后续 10/10 专项中复核通过；最新 Firefox/WebKit 专项 16/16。最终冻结 Web snapshot 不录屏，真实 30 分 2.577 秒，24/24、60 卡完整、原生 GL 丢失停止绘制，无页面异常，资源已清理。完整边界及证据见 [剩余计划交付](remaining-plan.md)。
+
+## 原交接回归事实与限制
 
 可移植摘要：[verification/phase3-final.json](verification/phase3-final.json)。Web 317 + API 793 = 1110 项单测通过，另 3 项跳过；类型/构建通过。完整 Chromium 58/58，最后受影响功能 11/11；Firefox/WebKit 排版 12/12、设置/便笺 6/6，分别记录。
 
@@ -63,7 +76,7 @@
 - `evidence/phase3-live-browser/live.json` 与截图/录屏：真实 GPT 图片算式 43、天气、表格、柱图、搜索 5/5；7 卡刷新前后无重叠。
 - `evidence/phase3-gpt/live.json`：复用既有 Pi，真实推理/三提醒/订阅检索 3/3。
 - `evidence/phase3-local-speech/REPORT.md`：17/17，合成录音/真实权重/虚拟 AudioWorklet；默认唤醒词只有词表/初始化，不是声学验收。
-- `evidence/phase3-stability/**`：旧 snapshot 真实 30 分钟，保留主题选择器错误；修正后的新 snapshot 只有短专项。不要改写成最新源码 30 分钟全绿。
+- 原 `2026-10-15T08-04-07-253Z-chromium` snapshot 的真实 30 分钟保留主题选择器错误，原修正复核只有短专项；不要改写这些原始记录。本轮最终源码另有 `2026-10-15T13-39-03-281Z-chromium` 完整长测，见上方最新验证。
 
 已知限制：两张均 Pin 且互相重叠时不擅自移动；手动拖动允许自行重叠，之后可「重新排布」。任意布局不等于已覆盖无限组合。Firefox 服务器转发日志曾出现 BackgroundLayer React 更新告警；功能通过但不能声称所有日志为零。构建有上游 Sherpaw/包体积提示。
 
@@ -71,9 +84,9 @@
 
 1. 接收 [人工清单](MANUAL_TEST.md) 的真实反馈，优先修复错删、事项遗漏、数值错误、重叠/丢卡及连接权限问题；不要先增加接入方式。
 2. 安排本人语音/默认唤醒词及物理 Safari/外接屏验收；自动化仍静音。新 GPT 登录只在用户确实要新登录时完整走原 Pi 流程。
-3. 统一清除、合法预录短反馈、词级字幕/振幅已实现，不要重复开发。先按授权做真实 Plan 时间戳和听感验收，随后按需求决定更复杂提醒。音色克隆/指定输出设备等未实现，不要暗示已可用；当前仍禁止实际发声。
-4. Laya 先复现上游/模型/适配差异再判断；Winnow 先确定准确项目。当前规则 → StepFun/GPT 已可用，不用阻塞其余体验修复。
-5. 最终代码再做一次完整长期/不录屏性能基线，排查 Firefox 诊断。不要自动删除以前失败记录。
+3. 统一清除、预录反馈、字幕/振幅、重复/条件提醒、输出设备选择、静音通知及已有 File ID 的 Plan 复刻路径均已实现，不要重复开发。真实 Plan 权限、时间戳、声音复刻与听感仍待用户操作；当前禁止自动化实际发声。上传 Plan 路径未明确，不能猜测或切普通计费 API。
+4. Kev 已有可选实验入口，优先收集真实中文输入的误判/放弃反馈；保留置信度、否定/复合语句和目标校验。Laya 原 NO_GO 证据保留，Winnow 身份已明确，但本机内存不适用。
+5. 最终 Web 源码 `4db5446` 已完成不录屏 30 分 2.577 秒、24/24 检查，证据见验证摘要；Firefox 驱动回调更新已修正。保留慢帧/物理 GPU 限制及所有旧失败记录，不把这次通过描述成所有设备流畅度验收。
 
 ## 检查命令与端口
 

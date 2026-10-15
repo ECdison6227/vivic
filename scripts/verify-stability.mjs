@@ -58,16 +58,17 @@ if (opts["analyze-run"]) {
     memoryScope: data.memoryMeaning, note: "No RSS measured. Heap segments are separated by document timeOrigin; endpoint trends are descriptive and do not prove absence of leaks. rAF is callback timing, not presentation FPS.",
     perDocument, cleanup: data.cleanup, videoFiles: data.videos, blockedExternalRequests: data.blockedExternalRequests,
     expectedBackendOfflineResponses: data.expectedBackendOfflineResponses,
-    limits: ["Synthetic TEST todo cards, backend offline", "Headless video recording and instrumentation overhead", "No WebKit/Firefox run unless separately installed", "Real CDP freeze commands and synthetic document.hidden injection are separate checks", "No fixed-frame or hard performance SLA is inferred"] };
+    limits: ["Synthetic TEST todo cards, backend offline", data.recordVideo === false ? "Headless instrumentation overhead; no video recording" : "Headless video recording and instrumentation overhead", "No WebKit/Firefox run unless separately installed", "Real CDP freeze commands and synthetic document.hidden injection are separate checks", "No fixed-frame or hard performance SLA is inferred"] };
   await writeFile(join(dir, "analysis.json"), JSON.stringify(summary, null, 2) + "\n");
   console.log(JSON.stringify({ analyzed: dir, state: data.state, realSoak: summary.realSoak, perDocument }, null, 2));
   process.exit(0);
 }
 if (opts.help !== undefined) {
-  console.log("node scripts/verify-stability.mjs [--focused] [--duration-minutes=30] [--sample-seconds=60] [--browser=chromium] [--port=5190] [--analyze-run=evidence/phase3-stability/RUN]");
+  console.log("node scripts/verify-stability.mjs [--focused] [--no-video] [--duration-minutes=30] [--sample-seconds=60] [--browser=chromium] [--port=5190] [--analyze-run=evidence/phase3-stability/RUN]");
   process.exit(0);
 }
 const focused = opts.focused !== undefined;
+const recordVideo = opts["no-video"] === undefined;
 const minutes = Number(opts["duration-minutes"] ?? (focused ? 1 : 30)), sampleSeconds = Number(opts["sample-seconds"] ?? 60);
 const port = Number(opts.port ?? 5190), browserName = opts.browser ?? "chromium";
 assert(minutes > 0 && Number.isFinite(minutes)); assert(sampleSeconds >= 5 && sampleSeconds <= 60);
@@ -84,7 +85,8 @@ const report = { schemaVersion: 1, label: "SYNTHETIC TEST DATA / backend offline
   isolation: { appSourceModified: false, devHooksUsed: false, dbWritesFromHarness: false,
     externalRequestsAllowed: false, keysUsed: false, microphoneAllowed: false, audioOutputMuted: true,
     existingDistTouched: false, sharedServicePortsTouched: false, clockManipulated: false },
-  instrumentation: "Bounded rAF deltas, PerformanceObserver longtasks, WebGL draw counters, navigation/visibility/error observers; test-only audio/microphone guards. Full-session Playwright video adds overhead.",
+  instrumentation: "Bounded rAF deltas, PerformanceObserver longtasks, WebGL draw counters, navigation/visibility/error observers; test-only audio/microphone guards. " + (recordVideo ? "Full-session Playwright video adds overhead." : "No video recording."),
+  recordVideo,
   checks: [], samples: [], errors: [], consoleErrors: [], consoleDiagnostics: [], browserDiagnostics: [], expectedBackendOfflineResponses: 0,
   apiPaths: {}, blockedExternalRequests: [], videos: [], cleanup: {}, state: "initializing" };
 let server, browser, context, control, display, snapshotDir, soakStarted = null, stopping = false;
@@ -135,7 +137,7 @@ async function shot(page, name) { const path = join(out, "screenshots", `${name}
 async function instrument() {
   // This runs only inside the isolated browser context, not in the app bundle.
   const state = { startedAt: performance.now(), frames: [], frameCount: 0, lastFrame: null, tasks: [], taskCount: 0,
-    webglDraws: 0, visibility: [], lifecycle: [], audioAttempts: 0, microphoneAttempts: 0, contextLost: 0, contextRestored: 0, windowErrors: [], unhandledRejections: [] };
+    webglDraws: 0, backgroundDrawsTotal: 0, visibility: [], lifecycle: [], audioAttempts: 0, microphoneAttempts: 0, contextLost: 0, contextRestored: 0, windowErrors: [], unhandledRejections: [] };
   Object.defineProperty(window, "__stabilityObserver", { value: state });
   addEventListener("error", event => { if (state.windowErrors.length < 1000) state.windowErrors.push({ message: event.message, filename: event.filename, at: performance.now() }); });
   addEventListener("unhandledrejection", event => { if (state.unhandledRejections.length < 1000) state.unhandledRejections.push({ message: String(event.reason), at: performance.now() }); });
@@ -153,7 +155,7 @@ async function instrument() {
   for (const Proto of [globalThis.WebGLRenderingContext?.prototype, globalThis.WebGL2RenderingContext?.prototype]) {
     if (!Proto) continue;
     for (const name of ["drawArrays", "drawElements"]) { const original = Proto[name];
-      Proto[name] = function (...args) { state.webglDraws++; return original.apply(this, args); };
+      Proto[name] = function (...args) { state.webglDraws++; if (this.canvas?.closest?.('[data-vivic-layer="background"]')) state.backgroundDrawsTotal++; return original.apply(this, args); };
     }
   }
   if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = async () => { state.microphoneAttempts++; throw new DOMException("Denied by stability runner", "NotAllowedError"); };
@@ -191,7 +193,8 @@ async function newControl() {
 async function send(text) {
   const input = control.locator("[data-vivic-command-input]");
   await input.fill(text); await control.locator("[data-vivic-command-send]").click();
-  await poll(() => control.locator("[data-vivic-command-feedback]").textContent(), value => Boolean(value?.includes("离线本地模式")), `offline command ${text}`);
+  const expected = text === "显示全部" ? "已显示全部卡片" : "离线本地模式";
+  await poll(() => control.locator("[data-vivic-command-feedback]").textContent(), value => Boolean(value?.includes(expected)), `local command ${text}`);
 }
 async function readRecord(page) {
   return page.evaluate(async () => {
@@ -222,7 +225,7 @@ async function sample(tag) {
           frameIntervalMs: { count: frames.length, mean: frames.length ? frames.reduce((a, b) => a + b, 0) / frames.length : null, p50: p(.5), p95: p(.95), p99: p(.99), max: p(1), over50ms: frames.filter(x => x > 50).length },
           longTasks: { supported: !s.longTasksUnsupported, count: tasks.length, totalMs: tasks.reduce((a, b) => a + b.duration, 0), maxMs: Math.max(0, ...tasks.map(t => t.duration)), entries: tasks },
           jsHeapBytes: memory ? { used: memory.usedJSHeapSize, total: memory.totalJSHeapSize, limit: memory.jsHeapSizeLimit, source: "performance.memory" } : null,
-          webglDrawsSinceSample: s.webglDraws, webglContextLostCount: s.contextLost, webglContextRestoredCount: s.contextRestored,
+          webglDrawsSinceSample: s.webglDraws, backgroundDrawsTotal: s.backgroundDrawsTotal, webglContextLostCount: s.contextLost, webglContextRestoredCount: s.contextRestored,
           windowErrors: s.windowErrors, unhandledRejections: s.unhandledRejections,
           visibilityEvents: s.visibility, lifecycleEvents: s.lifecycle, microphoneAttempts: s.microphoneAttempts, suppressedAudioAttempts: s.audioAttempts,
           navigation: performance.getEntriesByType("navigation").map(n => ({ type: n.type, domContentLoadedMs: n.domContentLoadedEventEnd, loadMs: n.loadEventEnd, durationMs: n.duration, transferSize: n.transferSize })),
@@ -309,7 +312,13 @@ async function loseContext() {
     ext.loseContext(); return { supported: true, nativeExtension: true };
   });
   if (detail.supported) {
-    await poll(() => display.locator('[data-vivic-layer="background"] canvas').count(), value => value === 0, "WebGL loss fallback");
+    await poll(() => display.locator('[data-vivic-layer="background"] canvas').isVisible(), value => !value, "WebGL loss fallback");
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const before = await display.evaluate(() => window.__stabilityObserver.backgroundDrawsTotal);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const after = await display.evaluate(() => window.__stabilityObserver.backgroundDrawsTotal);
+    assert.equal(after, before, "Lost background context must stop drawing");
+    detail.drawCallsAfterLoss = after - before;
     await count(60); detail.screenshot = await shot(display, "native-webgl-context-loss-fallback");
   }
   return detail;
@@ -363,7 +372,7 @@ try {
   browser = await engine.launch({ headless: true, ...(browserName === "chromium" ? { args: ["--mute-audio", "--deny-permission-prompts", "--enable-precise-memory-info"] } : {}) });
   report.browserVersion = browser.version(); report.browserExecutable = engine.executablePath();
   context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: [], serviceWorkers: "block",
-    recordVideo: { dir: join(out, "videos"), size: { width: 960, height: 600 } } });
+    ...(recordVideo ? { recordVideo: { dir: join(out, "videos"), size: { width: 960, height: 600 } } } : {}) });
   await context.addInitScript(instrument);
   await context.route("**/*", async route => {
     const url = new URL(route.request().url());

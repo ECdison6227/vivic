@@ -30,3 +30,5 @@ WebKit 首次测试在准备 Blob 缓存样本时出现 `UnknownError: Error pre
 - 自动化静音、TTS 默认关闭、无物理麦克风；浏览器只用独立 context 和 5174/8788。真实空 context 接口检查未写入用户画布。
 
 可移植记录：[verification/next-iteration.json](verification/next-iteration.json)。更新后请刷新 Control/Display。API watch 重载后的 StepFun/GPT 连接均已断开，用户可在 Control 重连，Pi 安全存储未注销；本轮没有新 OAuth 登录验收。
+
+后续所有剩余计划的实现、验证和外部边界集中记录在 [剩余计划交付](remaining-plan.md)。

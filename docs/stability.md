@@ -1,6 +1,6 @@
 # Phase 3 独立长期稳定性验证
 
-本任务只新增 `scripts/verify-stability.mjs`、本说明以及 `evidence/phase3-stability/**`，不修改应用、同步、画布或其它主线源码。
+此处保留原 Phase 3 稳定性记录。后续增量已经修改主线功能；每次脚本都重新生成冻结的生产 snapshot，不能把旧结果当作当前源码验收。
 
 运行命令：
 
@@ -9,6 +9,8 @@ node scripts/verify-stability.mjs
 ```
 
 默认 Chromium、真实 30 分钟 soak、每 60 秒采样、`127.0.0.1:5190`。脚本直接调用已安装 Playwright 的浏览器 API，不加载 Playwright 项目配置，不启动其 webServer，也不访问或清理 5173/5174/8787/8788。
+
+`--no-video` 关闭完整 session 录屏，保留截图与采样，并记录 `recordVideo:false`。仍有采样/浏览器开销，不代表无测量开销的硬件 GPU 基准。
 
 ## 数据、权限与构建隔离
 
@@ -139,3 +141,14 @@ node scripts/verify-stability.mjs --analyze-run=evidence/phase3-stability/RUN
 - 脚本 `node --check`、限定 oxlint 通过；新 snapshot 的 web typecheck 与 Vite production build 通过。
 
 `evidence/phase3-stability/final-resource-audit.json` 验证四个 runner PID 均已退出、所有本次临时 snapshot 已删除、5190 无监听；没有停止或修改主线 5173/5174/8787/8788 服务。失败预跑、误启动、原 30 分钟和正确短专项全部分别保留。此任务到此结束，不等待后续集成；主线可按上述只读定位统一修复节点测量链。
+
+
+## 最终增量源码的不录屏运行（2026-10-15 晚）
+
+`node scripts/verify-stability.mjs --no-video`，应用源码 `4db5446`。正式 soak 13:40:21.218–14:10:23.912 UTC，单调 **1,802,577ms**。`recordVideo:false`、`videos:[]`；**24/24** 检查通过，60 个唯一 TEST 卡片恢复完整，页面异常/已列运行时诊断为 0，麦克风/播放尝试为 0，所有自建资源关闭。静态 API 的预期 HTTP 503 单独记录，不说 console error 为零。
+
+原生 GL loss 真正触发并成功降级，之后 500ms 窗口背景绘制次数为 0；刷新恢复。最新包装不从驱动事件触发 React 更新，也不额外申请探测 context，保留真实 Grainient 与原有降级样式。
+
+正式证据和分析：`evidence/phase3-stability/2026-10-15T13-39-03-281Z-chromium/{report,analysis}.json`。`2026-10-15T13-33-29-088Z-chromium` 是旧反馈断言导致的准备失败，`2026-10-15T13-36-11-808Z-chromium` 为最后来源字段过滤修正而中断，两者均保留，不冒充完整长测。
+
+Display soak JS heap 约 14.6–31.2MB（不是 RSS），文档刷新分段；rAF 各窗口 P95 16.7–700ms。Headless、采样和同机负载下的这些数值不证明物理 GPU 流畅度，也不证明无泄漏。摘要见 [next-plan.json](verification/next-plan.json)。
