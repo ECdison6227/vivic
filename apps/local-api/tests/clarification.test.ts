@@ -5,6 +5,7 @@ import { IntentRequestSchema } from "../src/schemas.js";
 import { emptyContext, chatOk } from "./helpers.js";
 import { createDataClient } from "../src/data/index.js";
 import { ActionEnvelopeSchema } from "@vivic/contracts";
+import { continueWeatherInput } from "../src/data/weatherInput.js";
 
 describe("one-turn clarification continuation", () => {
   it("resolves an answer against the original delete request rather than creating a new timer", async () => {
@@ -28,6 +29,9 @@ describe("one-turn clarification continuation", () => {
 });
 
 describe("data questions never fall through to the model", () => {
+  it.each(["上海明天天气", "上海天气然后删除旧卡", "删除天气卡片"])("does not reduce unsupported or destructive %s to current weather", utterance => {
+    expect(continueWeatherInput("上海,上海市", utterance)).toBeNull();
+  });
   const location = { id: 1796236, name: "上海", latitude: 31.22, longitude: 121.46, country: "中国",
     country_code: "CN", admin1: "上海市", timezone: "Asia/Shanghai", feature_code: "PPLA" };
   const setup = () => {

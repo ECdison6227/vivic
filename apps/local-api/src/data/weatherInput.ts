@@ -32,7 +32,10 @@ export function parseWeatherInput(text: string): WeatherInput | null {
 
 /** Weather follow-ups stay with the real data adapter, without asking an LLM to invent data. */
 export function continueWeatherInput(answer: string, utterance: string): string | null {
-  if (!parseWeatherInput(utterance)) return null;
+  const original = parseWeatherInput(utterance);
+  // An unsupported forecast or compound request cannot become a partial
+  // current-weather lookup just because a city was supplied afterwards.
+  if (!original || (original.kind === "clarify" && original.message !== cityPrompt)) return null;
   if (/天气|气温/.test(answer)) return answer;
   const city = answer.trim().replace(/[。！!]$/, "");
   if (!CitySchema.safeParse(city).success || /待办|删除|聚焦|提醒|倒计时|然后|同时|不要|不查/.test(city)) return "天气";
