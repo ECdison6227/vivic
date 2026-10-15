@@ -60,13 +60,13 @@ describe("real-provider weather adapter with synthetic transport fixtures", () =
     expect(params.get("latitude")).toBe(String(shanghai.latitude));
   });
 
-  it("clarifies real-world homonyms instead of selecting by first result or population", async () => {
+  it("selects the verified municipality over same-name villages without using result order", async () => {
     const h = harness(url => url.includes("geocoding-api") ? json({ results: [shanghai,
       { ...shanghai, id: 7072498, admin1: "浙江", latitude: 29.32955, feature_code: "PPL" }] }) : undefined);
     const result = await h.client.handleDataIntent("上海天气", emptyContext());
-    expect(result).toMatchObject({ kind: "clarify", message: expect.stringContaining("浙江") });
-    expect(result).not.toHaveProperty("envelope");
-    expect(h.fetcher).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ kind: "envelope" });
+    expect(h.fetcher).toHaveBeenCalledTimes(2);
+    expect(card(result).sourceData).toMatchObject({ location: { id: shanghai.id, admin1: "上海市" } });
   });
 
   it("clarifies missing locations and unsupported future/mixed weather before networking", async () => {
@@ -225,7 +225,7 @@ describe("explicit user numeric data only", () => {
 
   it.each([
     "用表格记录：苹果3，香蕉5，然后删除旧卡", "把这组数据画成柱状图：周一3，周二5；清空画布",
-    "用表格记录：苹果3，同时查上海天气", "创建表格", "图表：苹果3，香蕉5", "饼图：苹果-3，香蕉5",
+    "用表格记录：苹果3，同时查上海天气", "图表：苹果3，香蕉5", "饼图：苹果-3，香蕉5",
     "饼图：苹果0，香蕉0", "用表格记录：苹果3个，香蕉5个", "用表格记录：苹果3，苹果5",
     "用表格记录：苹果3，香蕉未知", "用表格记录：苹果NaN，香蕉Infinity", "用表格记录：苹果1e6",
     "用表格记录：苹果0.1234567", "用表格记录：苹果1000000000001", "用表格记录：苹果3，",

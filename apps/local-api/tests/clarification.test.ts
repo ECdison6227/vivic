@@ -52,16 +52,16 @@ describe("data questions never fall through to the model", () => {
     return { run, queries, calls: () => plannerCalls };
   };
 
-  it("offers real homonym choices, then a city-only reply creates sourced weather", async () => {
+  it("selects the municipality directly and supports older pending location questions", async () => {
     const h = setup();
     const first = await h.run("上海天气");
-    expect(first).toMatchObject({ kind: "clarify", suggestions: ["上海,上海市天气", "上海,浙江天气"] });
-    const result = await h.run("上海,上海市", { utterance: "上海天气", question: first.message! });
+    expect(first).toMatchObject({ kind: "envelope" });
+    const result = await h.run("上海,上海市", { utterance: "上海天气", question: "请补充城市" });
     expect(result.envelope?.spokenText).toBe("已显示上海当前天气");
     expect(ActionEnvelopeSchema.safeParse(result.envelope).success).toBe(true);
     expect(result.envelope?.actions).toContainEqual(expect.objectContaining({ type: "card.create",
       card: expect.objectContaining({ type: "WeatherCard", displayProps: { tempC: 22.4, conditionIcon: "cloud" } }) }));
-    expect(h.queries).toHaveLength(3); expect(h.calls()).toBe(0);
+    expect(h.queries).toHaveLength(4); expect(h.calls()).toBe(0);
   });
 
   it.each(["上海,上海市天气", "帮我创建一张上海,上海市天气卡片", "天气卡片：上海,上海市"])("accepts explicit weather %s after a question", async text => {
@@ -70,11 +70,11 @@ describe("data questions never fall through to the model", () => {
     expect(result.kind).toBe("envelope"); expect(h.queries).toHaveLength(2); expect(h.calls()).toBe(0);
   });
 
-  it("asks for missing table data, then builds exact supplied numbers from the reply", async () => {
+  it("creates an empty table immediately and supports older pending data questions", async () => {
     const h = setup();
     const first = await h.run("给我创建一个表格");
-    expect(first).toMatchObject({ kind: "clarify", message: expect.stringContaining("表格需要你提供数据") });
-    const result = await h.run("周一3，周二5，周三4", { utterance: "给我创建一个表格", question: first.message! });
+    expect(first).toMatchObject({ kind: "envelope" });
+    const result = await h.run("周一3，周二5，周三4", { utterance: "给我创建一个表格", question: "请提供数据" });
     expect(result.envelope?.actions).toContainEqual(expect.objectContaining({ type: "card.create",
       card: expect.objectContaining({ type: "TableCard", displayProps: { columns: ["名称", "数值"], rows: [["周一", 3], ["周二", 5], ["周三", 4]] } }) }));
     expect(h.queries).toHaveLength(0); expect(h.calls()).toBe(0);

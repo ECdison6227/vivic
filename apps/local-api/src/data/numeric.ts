@@ -9,6 +9,7 @@ export function parseNumericIntent(text: string): NumericIntent | null {
   if (!/表格|柱状图|条形图|折线图|饼图|图表/.test(text)) return null;
   if (isMixedInstruction(text)) return { kind: "clarify", message: "这条指令包含多个操作，请拆成单项指令；本次没有执行任何部分。" };
   const raw = text.replace(/^(?:请帮我|请|帮我|给我)\s*/, "").replace(/[。！!]$/, "").trim();
+  if (/^(?:(?:创建|新建|生成|建|做|做个|制作|添加)(?:一?[个张])?)?(?:空白|空的|空)?表格(?:卡片|卡)?$/.test(raw)) return { kind: "table", rows: [] };
   const table = raw.match(/^(?:用表格(?:记录|展示|表示)|(?:创建|新建|生成|做个|制作)(?:一?[个张])?表格|表格(?:记录)?|把(?:这组|这些)?数据(?:整理|做)成表格)\s*[：:]\s*(.+)$/s);
   const chart = raw.match(/^(?:把(?:这组|这些)?数据)?(?:画成|绘成|生成|创建|制作|画个|用)?(柱状图|条形图|折线图|饼图)\s*[：:]\s*(.+)$/s);
   if (!table && !chart) return { kind: "clarify", message: example };

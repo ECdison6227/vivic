@@ -33,18 +33,11 @@ test.beforeEach(async ({ page, context }) => {
   await expect(page.locator("[data-vivic-control]")).toHaveAttribute("data-vivic-owner", "owner");
 });
 
-test("上海天气 gives visible choices and creates sourced weather after selection", async ({ page, context }, testInfo) => {
-  const evidence = path.resolve(process.cwd(), "../../evidence/next-iteration-data-input", testInfo.project.name || "chromium");
+test("上海天气 directly selects the verified municipality and creates sourced weather", async ({ page, context }, testInfo) => {
+  const evidence = path.resolve(process.cwd(), "../../evidence/manual-feedback/data-input", testInfo.project.name || "chromium");
   const display = await context.newPage();
   await display.goto(`/display?canvasId=${await activeCanvasId(page)}`);
   await sendCommand(page, "上海天气");
-  await expect(page.locator("[data-vivic-command-feedback]")).toContainText("多个同名");
-  await expect(display.locator("[data-vivic-subtitle]")).toContainText("多个同名");
-  await expect(display.locator("[data-vivic-thinking]")).toHaveCount(0);
-  await expect(display.locator(".vivic-card")).toHaveCount(0);
-  await page.locator("[data-vivic-data-suggestions]").scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(evidence, "TEST-weather-choice.png") });
-  await page.getByRole("button", { name: "上海,上海市天气", exact: true }).click();
   await expect(page.locator("[data-vivic-command-feedback]")).toHaveText("已显示上海当前天气");
   await expect(display.locator(".vivic-card")).toHaveCount(1);
   await expect(display.locator(".vivic-card")).toHaveText("22.4°C");
@@ -57,18 +50,20 @@ test("上海天气 gives visible choices and creates sourced weather after selec
   if (video) await video.saveAs(path.join(evidence, "TEST-weather-flow.webm"));
 });
 
-test("table request asks for data in both windows and accepts a bare numeric reply", async ({ page, context }, testInfo) => {
-  const evidence = path.resolve(process.cwd(), "../../evidence/next-iteration-data-input", testInfo.project.name || "chromium");
+test("table request creates an empty table immediately and fills the same card from a bare numeric reply", async ({ page, context }, testInfo) => {
+  const evidence = path.resolve(process.cwd(), "../../evidence/manual-feedback/data-input", testInfo.project.name || "chromium");
   const display = await context.newPage();
   await display.goto(`/display?canvasId=${await activeCanvasId(page)}`);
   await sendCommand(page, "给我创建一个表格");
-  await expect(page.locator("[data-vivic-command-feedback]")).toContainText("表格需要你提供数据");
-  await expect(display.locator("[data-vivic-subtitle]")).toContainText("表格需要你提供数据");
-  await expect(display.locator("[data-vivic-thinking]")).toHaveCount(0);
-  await expect(display.locator(".vivic-card")).toHaveCount(0);
-  await display.screenshot({ path: path.join(evidence, "TEST-table-question.png") });
+  await expect(page.locator("[data-vivic-command-feedback]")).toContainText("已创建空表格");
+  await expect(display.locator("[data-vivic-data-table]")).toHaveCount(1);
+  await expect(display.locator("[data-vivic-data-table] tbody tr")).toHaveCount(0);
+  await display.screenshot({ path: path.join(evidence, "TEST-empty-table.png") });
+  const originalId = await display.locator("[data-card-id]").getAttribute("data-card-id");
   await sendCommand(page, "周一3，周二5，周三4");
   await expect(display.locator("[data-vivic-data-table] tbody tr")).toHaveCount(3);
+  await expect(display.locator("[data-card-id]")).toHaveCount(1);
+  expect(await display.locator("[data-card-id]").getAttribute("data-card-id")).toBe(originalId);
   await expect(display.locator("[data-vivic-data-table] tbody tr").nth(1)).toHaveText("周二5");
   await expect(page.locator("[data-vivic-command-cancel]")).toHaveCount(0);
   await display.screenshot({ path: path.join(evidence, "TEST-table-result.png") });
@@ -79,8 +74,8 @@ test("table request asks for data in both windows and accepts a bare numeric rep
 test("a new command after a data question is independent; errors also reach Display", async ({ page, context }) => {
   const display = await context.newPage();
   await display.goto(`/display?canvasId=${await activeCanvasId(page)}`);
-  await sendCommand(page, "上海天气");
-  await expect(page.locator("[data-vivic-data-suggestions]")).toBeVisible();
+  await sendCommand(page, "天气");
+  await expect(page.locator("[data-vivic-command-feedback]")).toContainText("请明确城市");
   await sendCommand(page, "加待办：TEST 完成测试");
   await expect(display.locator(".vivic-card")).toContainText("TEST 完成测试");
   await expect(page.locator("[data-vivic-data-suggestions]")).toHaveCount(0);

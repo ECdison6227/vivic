@@ -62,8 +62,19 @@ export function createDataClient(options: { fetchImpl?: typeof fetch; config?: P
 let shared: DataClient | undefined;
 /** Returns null for unrelated intents; recognized but unsafe/unsupported requests clarify. */
 export async function handleDataIntent(text: string, ctx: CanvasContext, signal?: AbortSignal, client?: Pick<DataClient, "weather">): Promise<IntentResult | null> {
-  if (!/天气|气温|表格|柱状图|条形图|折线图|饼图|图表/.test(text)) return null;
   if (signal?.aborted) return { kind: "error", message: "查询已取消，未执行任何动作。" };
+  if (!/天气|气温|表格|柱状图|条形图|折线图|饼图|图表/.test(text)) {
+    const draft = ctx.cards.filter(card => card.type === "TableCard" && Array.isArray(card.displayProps.rows) && card.displayProps.rows.length === 0);
+    const focused = draft.find(card => card.id === ctx.focusHistory.at(-1));
+    const target = focused ?? (draft.length === 1 ? draft[0] : undefined);
+    const numeric = target ? parseNumericIntent(`表格：${text}`) : null;
+    if (!target || numeric?.kind !== "table" || !numeric.rows.length) return null;
+    const stamp = new Date().toISOString(), original = { provenance: "user-input", originalText: text, capturedAt: stamp, rows: numeric.rows };
+    return { kind: "envelope", usedProvider: "rules", envelope: ActionEnvelopeSchema.parse({ schemaVersion: "0.6", requestId: `data_${randomUUID()}`, canvasId: ctx.canvasId,
+      spokenText: "已填入表格", actions: [{ type: "card.update", targetId: target.id,
+        displayProps: { columns: ["名称", "数值"], rows: numeric.rows.map(row => [row.label, row.value]) },
+        sourceData: { ...original, [PROVENANCE_FIELD]: encodeProvenance({ sources: [], sourceData: original })! } }] }) };
+  }
   if (text.length > 500 || /[\p{Cc}\p{Cf}]/u.test(text.replace(/\n/g, ""))) return { kind: "clarify", message: "请提供不超过 500 字符的单项天气或数值指令。" };
   const transformed = transformDataIntent(text, ctx);
   if (transformed?.kind === "clarify") return transformed;
@@ -83,7 +94,7 @@ export async function handleDataIntent(text: string, ctx: CanvasContext, signal?
     const card: CardRecord = numeric.kind === "table"
       ? { ...common, type: "TableCard", displayProps: { columns: ["名称", "数值"], rows: numeric.rows.map(row => [row.label, row.value]) }, sourceData }
       : { ...common, type: "ChartCard", displayProps: { chartKind: numeric.kind, points: numeric.rows.map(row => ({ x: row.label, y: row.value })) }, sourceData };
-    return { ...envelope(ctx, card, numeric.kind === "table" ? "已创建表格" : "已创建图表"), usedProvider: "rules" };
+    return { ...envelope(ctx, card, numeric.kind === "table" ? numeric.rows.length ? "已创建表格" : "已创建空表格" : "已创建图表"), usedProvider: "rules" };
   }
   const request = parseWeatherInput(text);
   if (!request || request.kind === "clarify") return request;

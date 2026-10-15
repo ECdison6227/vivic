@@ -49,7 +49,7 @@ const PlannerOutputSchema = z.union([
   z.looseObject({ actions: z.array(z.unknown()).max(12), spokenText: z.string().max(180).optional(),
     clarify: z.string().trim().min(1).max(180).optional() }),
 ]);
-const OFFLINE_MESSAGE = "未连接模型，当前只做本地规则：这条指令我还不会处理。连接 StepFun 后重试，或先用「倒计时/加待办/显示全部/恢复原视图」。";
+const OFFLINE_MESSAGE = "未连接模型，当前只做本地规则：这条指令我还不会处理。连接 GPT 或 StepFun 后重试，或先用「倒计时/加待办/显示全部/恢复原视图」。";
 const assembleEnvelope = (actions: Action[], canvasId: string, spokenText?: string) => {
   const parsed = ActionEnvelopeSchema.safeParse({ schemaVersion: "0.6",
     requestId: `llm_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`,
@@ -85,7 +85,7 @@ export const runIntent = async (
     }
     const weatherFollowup = continuation ? continueWeatherInput(req.text, continuation.utterance) : null;
     const numericQuestion = continuation && !weatherFollowup ? parseNumericIntent(continuation.utterance) : null;
-    const numericFollowup = numericQuestion?.kind === "clarify" && !isMixedInstruction(continuation!.utterance)
+    const numericFollowup = (numericQuestion?.kind === "clarify" || numericQuestion?.kind === "table" && numericQuestion.rows.length === 0) && !isMixedInstruction(continuation!.utterance)
       ? (/表格|柱状图|条形图|折线图|饼图|图表/.test(req.text) ? req.text
         : `${continuation!.utterance.match(/表格|柱状图|条形图|折线图|饼图|图表/)![0]}：${req.text}`) : null;
     if (deps.data && !hasImages && (!continuation || weatherFollowup || numericFollowup)) {

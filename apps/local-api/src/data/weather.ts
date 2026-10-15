@@ -53,10 +53,19 @@ export async function lookupWeather(city: string, options: {
   geoUrl.search = new URLSearchParams({ name: query, count: "10", language: /\p{Script=Han}/u.test(query) ? "zh" : "en", format: "json" }).toString();
   const geo = await readProviderJson(geoUrl, GeocodingSchema, options);
   const geoFetchedAt = new Date().toISOString();
-  // Never choose the first/populous/nearest result. No GPS, cached city or IP lookup.
-  const candidates = [...new Map((geo.results ?? []).filter(row => normalize(row.name) === normalize(name)
+  // Match verified place identity; never choose simply by ordering/population or GPS.
+  let candidates = [...new Map((geo.results ?? []).filter(row => normalize(row.name) === normalize(name)
     && /^(?:PPL[A-Z0-9]*|ADM[1-4])$/.test(row.feature_code))
     .map(row => [row.id, row] as const)).values()];
+  if (qualifier) candidates = candidates.filter(row => [row.admin1, row.admin2, row.country, row.country_code]
+    .some(value => value && normalize(value) === normalize(qualifier)));
+  // A municipality named explicitly by the user is a city, not every village
+  // sharing its name. Keep using provider-verified coordinates and attribution.
+  if (!qualifier && ["上海", "北京", "天津", "重庆"].includes(name)) {
+    const municipality = candidates.filter(row => row.country_code === "CN" && row.admin1
+      && normalize(row.admin1) === normalize(name) && /^(?:PPLC|PPLA|ADM1)$/.test(row.feature_code));
+    if (municipality.length === 1) candidates = municipality;
+  }
   if (candidates.length !== 1) {
     const labels = candidates.slice(0, 3).map(row => [...new Set([row.name, row.admin1, row.country].filter(Boolean))].join(" / "));
     return { kind: "clarify", candidates, message: candidates.length
