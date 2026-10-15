@@ -41,7 +41,7 @@ test("voice and speed are used for preview, volume stays browser-only, preferenc
   const display = await context.newPage(); await display.goto("/display");
   await expect(display.locator('[data-vivic-speaking]')).toContainText("你好", { timeout: 5000 });
   await expect(display.locator('[data-vivic-ai-state="speaking"]')).toHaveCount(1);
-  const dir = path.resolve(process.cwd(), "../../evidence/phase2-reminders"); fs.mkdirSync(dir, { recursive: true });
+  const dir = path.resolve(process.cwd(), "../../evidence/voice-feedback/regression/voices"); fs.mkdirSync(dir, { recursive: true });
   await page.screenshot({ path: path.join(dir, "voice-settings.png"), fullPage: true });
   await page.locator('[data-vivic-tts-preview]').click();
   await expect(page.locator('[data-vivic-tts-note]')).not.toHaveText("正在播放…");

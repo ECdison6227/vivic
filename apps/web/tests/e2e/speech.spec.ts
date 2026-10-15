@@ -20,6 +20,16 @@ const result = (route: Route) => route.fulfill({ json: {
 } });
 
 test("TTS is opt-in and an unavailable Plan voice reports failure without blocking actions", async ({ page }) => {
+  await page.addInitScript(() => {
+    class SilentAudio {
+      volume = 0;
+      play() { return Promise.resolve(); }
+      pause() {}
+      removeAttribute() {}
+      load() {}
+    }
+    Object.defineProperty(window, "Audio", { value: SilentAudio });
+  });
   let calls = 0;
   await page.route("**/api/speech", route => {
     calls += 1;

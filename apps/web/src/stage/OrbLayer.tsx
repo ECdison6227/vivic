@@ -101,6 +101,7 @@ export const OrbLayer = () => {
             ><SiriOrb
               size={directive.size}
               state={directive.state}
+              amplitude={activity?.phase === "speaking" && !reduceMotion ? activity.speech?.amplitude ?? 0 : 0}
               animationDuration={thinking ? 12 : 24}
             /></motion.div>
           </motion.div>

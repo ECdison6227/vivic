@@ -2,6 +2,8 @@
 
 核实日期：2026-10-15。仅接入 StepFun Plan API Key，LLM 与 TTS 共用后端内存中的同一凭据。其他 provider、OAuth、ASR 与音色复刻暂缓。
 
+同日增量：既有二进制接口兼容保留，新增可选 `timestamps`，通过同一 Plan SSE 响应取得音频与词轴；前端已接实际播放时钟/PCM 包络及本地固定短句。当前模型连接、独立语音和验收状态以 [架构](provider-voice-architecture.md) 与 [语音增量](voice-feedback.md) 为准；下文原「未提供词级时间戳」「OAuth/ASR 暂缓」描述为历史模块交接，不能覆盖当前实现。
+
 ## 官方依据
 
 | 事项 | 官方来源与结论 |

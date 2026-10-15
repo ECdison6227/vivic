@@ -19,7 +19,15 @@ export const ActivitySchema = z.strictObject({
   text: z.string().min(1).max(120),
   expiresAt: z.number(),
   phase: z.enum(["thinking", "preparing-speech", "speaking", "listening", "transcribing"]).optional(),
-});
+  speech: z.strictObject({
+    amplitude: z.number().finite().min(0).max(1),
+    wordStart: z.number().int().min(0).max(119).optional(),
+    wordEnd: z.number().int().min(1).max(120).optional(),
+  }).optional(),
+}).refine(activity => !activity.speech || (activity.phase === "speaking"
+  && ((activity.speech.wordStart === undefined && activity.speech.wordEnd === undefined)
+    || (activity.speech.wordStart !== undefined && activity.speech.wordEnd !== undefined
+      && activity.speech.wordStart < activity.speech.wordEnd && activity.speech.wordEnd <= activity.text.length))));
 
 const CardStateSchema = z.strictObject({
   record: CardRecordSchema,

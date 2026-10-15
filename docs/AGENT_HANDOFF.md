@@ -10,6 +10,8 @@
 
 最新用户要求：在 `agent/next-iteration` 修复实际反馈，再继续未完计划。用户最终更正为「上海天气」「给我创建一个表格」思考结束后没有卡片/解释，不是待办问题。已补齐数据澄清的展示字幕、真实地点选项、天气/表格续答；已继续完成统一清除本地数据入口。增量详情与最新检查见 [next-iteration.md](next-iteration.md)，下文原交接验证数字保留为历史基线。
 
+随后用户继续原计划，已实现[固定预录短反馈、逐词字幕、PCM 振幅](voice-feedback.md)。预录素材已随仓库附许可/散列；生成与测试没有播放扬声器或开麦。真实 StepFun 词轴及听感仍待验收，不要重复开发或误称实际套餐已测。
+
 ## 不可遗失的约束
 
 - 中文沟通，直接推进已授权工作。不要让用户反复说「继续」，也不要假称启动了子代理。此前子代理均已完成并关闭，没有后台在途实现任务。
@@ -46,7 +48,7 @@
 | 数据与搜索 | `local-api/src/data/**`、`search/**`、`intent/searchSummary.ts`；数值来自明确输入或既有数据，比较摘要只能引用已有证据 |
 | 图片 | `ai/attachments.ts`、`control/ImageAttachment.tsx`、API `images.ts`/`imageDecoder.ts`：4MiB/16MP/8192 边上限，Sharp 全像素解码，当前请求内存附件 |
 | 本地语音 | `ai/localSpeech/**`、`control/LocalSpeechSettings.tsx`/`LocalWakeInput.tsx`；固定模型 manifest，按需下载/SHA/取消/清理，显式前台单句；不是后台常驻唤醒 |
-| 语音与提醒 | `ai/speech.ts`/`voiceInput.ts`、`reminders/**`、API `stepfun/**`；实际播放状态驱动反馈，预录音/逐词时间线尚未做 |
+| 语音与提醒 | `ai/speech.ts`/`speechTelemetry.ts`、`public/voice-feedback/`、`reminders/**`、API `speechStream.ts`；固定短句、同流词轴/浏览器边界、PCM 包络通过现有 activity 广播，只有 owner 播放 |
 | 统一清除 | `control/DataActions.tsx`、`sync/controlHost.ts` 的 `clearLocalData()`、`persistence/db.ts` 的原子 reset；`local-data-reset` 通知已打开窗口，清除前取消在途请求和语音；后端账号/Pi 存储不动 |
 
 完整模块说明在 `docs/`，许可证及固定来源在根 `LICENSES.md`。
@@ -69,7 +71,7 @@
 
 1. 接收 [人工清单](MANUAL_TEST.md) 的真实反馈，优先修复错删、事项遗漏、数值错误、重叠/丢卡及连接权限问题；不要先增加接入方式。
 2. 安排本人语音/默认唤醒词及物理 Safari/外接屏验收；自动化仍静音。新 GPT 登录只在用户确实要新登录时完整走原 Pi 流程。
-3. 统一「清除本地数据」入口已完成，不要重复开发。继续合法预录短反馈、逐词时间线/振幅反馈；随后按需求决定更复杂提醒。音色克隆/指定输出设备等未实现，不要暗示已可用。
+3. 统一清除、合法预录短反馈、词级字幕/振幅已实现，不要重复开发。先按授权做真实 Plan 时间戳和听感验收，随后按需求决定更复杂提醒。音色克隆/指定输出设备等未实现，不要暗示已可用；当前仍禁止实际发声。
 4. Laya 先复现上游/模型/适配差异再判断；Winnow 先确定准确项目。当前规则 → StepFun/GPT 已可用，不用阻塞其余体验修复。
 5. 最终代码再做一次完整长期/不录屏性能基线，排查 Firefox 诊断。不要自动删除以前失败记录。
 

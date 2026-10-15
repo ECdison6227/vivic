@@ -14,6 +14,9 @@ export const SubtitleLayer = () => {
   const line = activity?.phase === "speaking" ? activity : subtitle?.priority === "reminder" ? subtitle : activity ?? subtitle;
   const showingActivity = Boolean(activity && line === activity);
   const lineId = line && ("requestId" in line ? line.requestId : line.id);
+  const timing = showingActivity && activity?.phase === "speaking" ? activity.speech : undefined;
+  const wordStart = timing?.wordStart, wordEnd = timing?.wordEnd;
+  const wordActive = wordStart !== undefined && wordEnd !== undefined && wordStart < wordEnd && wordEnd <= (line?.text.length ?? 0);
 
   useEffect(() => {
     if (!activity) return;
@@ -48,12 +51,17 @@ export const SubtitleLayer = () => {
             data-vivic-thinking={showingActivity && activity?.phase !== "speaking" ? "true" : undefined}
             data-vivic-speaking={showingActivity && activity?.phase === "speaking" ? "true" : undefined}
             className="vivic-subtitle"
+            aria-label={wordActive ? line.text : undefined}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.28, ease: "easeOut" }}
           >
-            {line.text}
+            {wordActive ? <span aria-hidden="true">
+              <span className="opacity-60">{line.text.slice(0, wordStart)}</span>
+              <span className="font-semibold" data-vivic-spoken-word>{line.text.slice(wordStart, wordEnd)}</span>
+              <span className="opacity-60">{line.text.slice(wordEnd)}</span>
+            </span> : line.text}
           </motion.p>
         )}
       </AnimatePresence>

@@ -1,5 +1,8 @@
 import { getVoiceConfiguration } from "./voiceConfig";
 import { createBrowserTtsAdapter } from "./localSpeech/browserTts";
+import { decodeSpeechEnvelope, readTimedSpeech, speechFrame, type SpeechEnvelope, type SpeechRange } from "./speechTelemetry";
+import type { SpeechWord } from "@vivic/contracts";
+import { feedbackPhrase } from "./shortFeedback";
 
 /** Curated official subset, verified 2026-10-15. Kept in sync with API by offline tests. */
 export const SPEECH_VOICES_SOURCE = "https://platform.stepfun.com/docs/zh/guides/developer/tts#官方音色清单";
@@ -20,6 +23,8 @@ export interface SpeechPreferences {
   speed: number;
   /** Browser playback volume: 0 (muted) through 1. Never sent upstream. */
   volume: number;
+  /** Explicit opt-in until the user's Plan timestamp capability is verified. */
+  timestamps?: boolean;
 }
 
 export const SPEECH_PREFERENCES_STORAGE_KEY = "vivic.speech.preferences.v1";
@@ -37,6 +42,7 @@ const readPreferences = (): { preferences: SpeechPreferences; preferenceError: s
         if ("voice" in raw && isVoice(raw.voice)) preferences.voice = raw.voice;
         if ("speed" in raw && inRange(raw.speed, 0.5, 2)) preferences.speed = raw.speed;
         if ("volume" in raw && inRange(raw.volume, 0, 1)) preferences.volume = raw.volume;
+        if ("timestamps" in raw && typeof raw.timestamps === "boolean") preferences.timestamps = raw.timestamps;
       }
     }
     return { preferences, preferenceError: null };
@@ -53,7 +59,10 @@ export interface SpeechSnapshot {
   playing: boolean;
   requestId: string | null;
   text: string | null;
-  kind: "feedback" | "preview" | null;
+  kind: "feedback" | "preview" | "phrase" | null;
+  source: "stepfun" | "browser" | "prerecorded" | null;
+  amplitude: number;
+  wordRange: SpeechRange | null;
   error: string | null;
   preferences: SpeechPreferences;
   preferenceError: string | null;
@@ -65,7 +74,7 @@ export type SpeechResult =
 
 let snapshot: SpeechSnapshot = {
   enabled: false, status: "idle", loading: false, playing: false,
-  requestId: null, text: null, kind: null, error: null, ...readPreferences(),
+  requestId: null, text: null, kind: null, source: null, amplitude: 0, wordRange: null, error: null, ...readPreferences(),
 };
 const listeners = new Set<() => void>();
 // Bounded event IDs, not text: distinct commands may legitimately say the same thing.
@@ -89,6 +98,7 @@ interface Playback {
   audio?: HTMLAudioElement;
   url?: string;
   done: boolean;
+  stopTelemetry?: () => void;
   finish: (result: SpeechResult) => void;
 }
 let active: Playback | undefined;
@@ -101,7 +111,7 @@ export const cancelSpeech = (): void => {
     active.controller.abort();
     active.finish({ status: "cancelled" });
   } else if (snapshot.status !== "idle" || snapshot.error || snapshot.requestId !== null) {
-    update({ status: "idle", error: null, requestId: null, text: null, kind: null });
+    update({ status: "idle", error: null, requestId: null, text: null, kind: null, source: null, amplitude: 0, wordRange: null });
   }
 };
 
@@ -122,14 +132,18 @@ export const resetSpeechPreferences = (): void => {
 export const setSpeechPreferences = (patch: Partial<SpeechPreferences>): boolean => {
   if ((patch.voice !== undefined && !isVoice(patch.voice)) ||
       (patch.speed !== undefined && !inRange(patch.speed, 0.5, 2)) ||
-      (patch.volume !== undefined && !inRange(patch.volume, 0, 1))) return false;
+      (patch.volume !== undefined && !inRange(patch.volume, 0, 1)) ||
+      (patch.timestamps !== undefined && typeof patch.timestamps !== "boolean")) return false;
   const preferences: SpeechPreferences = {
     voice: patch.voice ?? snapshot.preferences.voice,
     speed: patch.speed ?? snapshot.preferences.speed,
     volume: patch.volume ?? snapshot.preferences.volume,
+    ...(patch.timestamps !== undefined || snapshot.preferences.timestamps !== undefined
+      ? { timestamps: patch.timestamps ?? snapshot.preferences.timestamps } : {}),
   };
   // Changing synthesis settings cancels obsolete audio. Volume is live, with no new request.
-  if (preferences.voice !== snapshot.preferences.voice || preferences.speed !== snapshot.preferences.speed) cancelSpeech();
+  if (preferences.voice !== snapshot.preferences.voice || preferences.speed !== snapshot.preferences.speed
+    || preferences.timestamps !== snapshot.preferences.timestamps) cancelSpeech();
   if (active?.audio) active.audio.volume = preferences.volume;
   let preferenceError: string | null = null;
   try {
@@ -151,6 +165,14 @@ export const speakText = (
   options: { requestId: string; signal?: AbortSignal },
 ): Promise<SpeechResult> => playText(text, options, "feedback");
 
+export const speakShortFeedback = (text: "我看看" | "稍等" | "好的", options: { requestId: string; signal?: AbortSignal }) =>
+  playText(text, options, "phrase");
+
+/** Finishing a plan must cancel only that plan's short cue, never another utterance. */
+export const cancelShortFeedback = (requestId: string) => {
+  if (snapshot.kind === "phrase" && snapshot.requestId?.startsWith(`${requestId}:`)) cancelSpeech();
+};
+
 /** Explicit audition works while automatic feedback is off, without enabling it. */
 export const previewSpeech = (
   options: { requestId?: string; signal?: AbortSignal } = {},
@@ -161,10 +183,10 @@ export const previewSpeech = (
 const playText = (
   text: string,
   options: { requestId: string; signal?: AbortSignal },
-  kind: "feedback" | "preview",
+  kind: "feedback" | "preview" | "phrase",
 ): Promise<SpeechResult> => {
   if (getVoiceConfiguration().tts === "none") return Promise.resolve({ status: "skipped" });
-  if (kind === "feedback" && !snapshot.enabled) return Promise.resolve({ status: "skipped" });
+  if (kind !== "preview" && !snapshot.enabled) return Promise.resolve({ status: "skipped" });
   if (options.signal?.aborted) return Promise.resolve({ status: "cancelled" });
   if (seen.has(options.requestId)) return Promise.resolve({ status: "skipped" });
   cancelSpeech();
@@ -194,10 +216,12 @@ const playText = (
       finish: (result) => {
         if (job.done) return;
         job.done = true;
+        job.stopTelemetry?.();
         options.signal?.removeEventListener("abort", onAbort);
         if (job.audio) {
           job.audio.onended = null;
           job.audio.onerror = null;
+          job.audio.ontimeupdate = null; job.audio.onpause = null; job.audio.onwaiting = null; job.audio.onplaying = null;
           job.audio.pause();
           job.audio.removeAttribute("src");
           job.audio.load();
@@ -206,10 +230,10 @@ const playText = (
         if (active === job) {
           active = undefined;
           update(result.status === "error"
-            ? { status: "error", error: result.error }
+            ? { status: "error", error: result.error, amplitude: 0, wordRange: null }
             : result.status === "cancelled"
-              ? { status: "idle", error: null, requestId: null, text: null, kind: null }
-              : { status: "idle", error: null });
+              ? { status: "idle", error: null, requestId: null, text: null, kind: null, source: null, amplitude: 0, wordRange: null }
+              : { status: "idle", error: null, amplitude: 0, wordRange: null });
         }
         resolve(result);
       },
@@ -217,27 +241,39 @@ const playText = (
     active = job;
     options.signal?.addEventListener("abort", onAbort, { once: true });
     const { voice, speed } = snapshot.preferences;
-    update({ status: "loading", error: null, requestId: options.requestId, text: spokenText, kind });
+    update({ status: "loading", error: null, requestId: options.requestId, text: spokenText, kind, amplitude: 0, wordRange: null, source: null });
     if (job.done) return;
     const run = async () => {
       try {
         const voiceConfig = getVoiceConfiguration();
-        if (voiceConfig.tts === "browser") {
+        const phrase = kind !== "preview" ? feedbackPhrase(spokenText) : null;
+        if (kind === "phrase" && !phrase) { job.finish({ status: "skipped" }); return; }
+        if (!phrase && voiceConfig.tts === "browser") {
+          update({ source: "browser" });
           browserTts.setEnabled(true);
           await browserTts.speak(spokenText, {
             ...(voiceConfig.browserVoice ? { voiceId: voiceConfig.browserVoice } : {}),
             localOnly: true, signal: controller.signal,
             rate: speed, volume: snapshot.preferences.volume,
             onStart: () => { if (!job.done) update({ status: "playing", error: null }); },
+            onBoundary: (start, length) => {
+              if (job.done || !snapshot.playing) return;
+              const valid = length > 0 && start + length <= spokenText.length
+                && !/[\uDC00-\uDFFF]/u.test(spokenText[start] ?? "")
+                && !/[\uD800-\uDBFF]/u.test(spokenText[start + length - 1] ?? "");
+              update({ wordRange: valid ? { start, end: start + length } : null });
+            },
           });
           job.finish({ status: "completed" }); return;
         }
-        const response = await fetch("/api/speech", {
-          method: "POST",
+        update({ source: phrase ? "prerecorded" : "stepfun" });
+        const response = await fetch(phrase?.url ?? "/api/speech", {
+          method: phrase ? "GET" : "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text: spokenText, voice, speed }),
+          ...(phrase ? {} : { body: JSON.stringify({ text: spokenText, voice, speed,
+            ...(snapshot.preferences.timestamps ? { timestamps: true } : {}) }) }),
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]),
-          cache: "no-store",
+          cache: phrase ? "force-cache" : "no-store",
         });
         if (job.done) return;
         if (!response.ok) {
@@ -247,7 +283,11 @@ const playText = (
           job.finish({ status: "error", error });
           return;
         }
-        const blob = await response.blob();
+        let words: SpeechWord[] = [];
+        const timed = /^application\/json(?:;|$)/i.test(response.headers.get("content-type") ?? "") && !phrase
+          ? await readTimedSpeech(response, spokenText, controller.signal) : null;
+        const blob = timed?.blob ?? await response.blob();
+        words = timed?.words ?? [];
         if (job.done) return;
         if (!blob.size || blob.size > 4 * 1024 * 1024 || !/^audio\/(mpeg|mp3)(;|$)/i.test(blob.type)) {
           job.finish({ status: "error", error: "语音服务未返回有效音频。" });
@@ -256,10 +296,28 @@ const playText = (
         job.url = URL.createObjectURL(blob);
         job.audio = new Audio(job.url);
         job.audio.volume = snapshot.preferences.volume;
+        if (phrase) job.audio.playbackRate = speed;
+        let envelope: SpeechEnvelope | null = null;
+        const tick = () => {
+          if (job.done || active !== job || !job.audio || !snapshot.playing) return;
+          if (job.audio.paused === true) { update({ amplitude: 0, wordRange: null }); return; }
+          update(speechFrame(words, envelope, (job.audio.currentTime || 0) * 1000, snapshot.preferences.volume));
+        };
+        // Decoding never delays playback; a late analysis cannot revive a cancelled job.
+        void decodeSpeechEnvelope(blob, controller.signal).then(value => { if (!job.done && active === job) { envelope = value; tick(); } });
+        job.audio.ontimeupdate = tick;
+        job.audio.onpause = () => { if (!job.done) update({ status: "loading", amplitude: 0, wordRange: null }); };
+        job.audio.onwaiting = () => { if (!job.done) update({ status: "loading", amplitude: 0, wordRange: null }); };
+        job.audio.onplaying = () => { if (!job.done) { update({ status: "playing", error: null }); tick(); } };
         job.audio.onended = () => job.finish({ status: "completed" });
         job.audio.onerror = () => job.finish({ status: "error", error: "浏览器无法播放语音。" });
         await job.audio.play();
-        if (!job.done) update({ status: "playing", error: null });
+        if (!job.done) {
+          update({ status: "playing", error: null }); tick();
+          if (Number.isFinite(job.audio.currentTime)) {
+            const timer = setInterval(tick, 100); job.stopTelemetry = () => clearInterval(timer);
+          }
+        }
       } catch (error) {
         if (job.done) return;
         const blocked = error instanceof DOMException && error.name === "NotAllowedError";

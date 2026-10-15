@@ -47,7 +47,7 @@ test("pending feedback reaches both windows, escalates, then clears on completio
   await expect(late.locator('[data-vivic-thinking]')).toHaveText("让我想想…");
   await expect(page.locator('[data-vivic-command-feedback]')).toHaveText("响应较慢，仍在处理…", { timeout: 7000 });
   await expect(display.locator('[data-vivic-thinking]')).toHaveText("响应较慢，仍在处理…");
-  const dir = path.resolve(process.cwd(), "../../evidence/phase2a");
+  const dir = path.resolve(process.cwd(), "../../evidence/voice-feedback/regression/thinking");
   fs.mkdirSync(dir, { recursive: true });
   await display.screenshot({ path: path.join(dir, "thinking-display.png") });
   await page.screenshot({ path: path.join(dir, "thinking-control.png") });

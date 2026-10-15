@@ -62,6 +62,12 @@ Sharp JavaScript 包许可不能覆盖全部 native 二进制依赖：本机安�
 
 浏览器 `speechSynthesis` / `localService` 音色来自浏览器/系统，不是上述模型包，也不随本仓库分发；不能由 Sherpaw 许可推导音色许可或离线保证。最新测试静音/TTS 关闭，本地音色尚无实际发声验收。
 
+## 随应用提供的固定短反馈
+
+三个自编短句「我看看」「稍等」「好的」由 [Kokoro-82M-v1.1-zh](https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh/tree/01e7505bd6a7a2ac4975463114c3a7650a9f7218) 开放权重离线合成；原模型 Apache-2.0，中文数据授权来源见原模型说明。使用 ONNX 转换 `csukuangfj/kokoro-multi-lang-v1_1` revision `914313412b607d95400bcd12446233fbd1248801`，原许可全文、文件散列和生成说明随 [voice-feedback](apps/web/public/voice-feedback/PROVENANCE.md) 保留。三个 MP3 共 19,911 字节，没有分发权重或新增应用推理引擎。
+
+仅开发时使用 sherpa-onnx 1.12.32（Apache-2.0）、NumPy 2.3.3 和 FFmpeg，模型附带 eSpeak NG 字典（GPL-3.0）用于预处理；这些工具/权重/字典保留在忽略的 `.cache/`，未复制进 Web 产物。没有使用许可 Unknown 的 Piper huayan、系统音色录制或用户麦克风录音。生成未发声，真实听感待验收。
+
 ## 天气与地名数据归属
 
 Open-Meteo 是调用公共 HTTPS API 的数据服务，未安装或复制其 AGPL 服务端源码。既有本地研究记录其 API 数据为 **CC BY 4.0**，公共无 Key 服务仅用于非商业场景；不能把数据许可等同于托管 API 的无限免费商业使用权。天气来自模型当前条件，不伪称现场观测。

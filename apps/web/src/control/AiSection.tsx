@@ -222,12 +222,18 @@ export const AiSection = ({ onBackendChange, disabled = false }: AiSectionProps)
           className="h-4 w-4 shrink-0 accent-neutral-900"
           checked={speech.enabled}
           onChange={(event) => setSpeechEnabled(event.target.checked)}
-          disabled={disabled || busy || !ttsReady}
+          disabled={disabled || busy || voiceConfig.tts === "none"}
           aria-describedby="vivic-tts-note"
           data-vivic-tts-toggle
         />
         开启语音反馈（TTS）
       </label>
+      <p className="mt-2 text-xs text-neutral-500">常用短反馈使用内置音频，其余内容使用所选音色。{!ttsReady && voiceConfig.tts !== "none" ? "当前语音服务尚不可用，内置短反馈仍可使用。" : ""}</p>
+      {voiceConfig.tts === "stepfun" && <label className="mt-2 flex items-center gap-2 text-xs text-neutral-700">
+        <Input type="checkbox" className="h-4 w-4 shrink-0 accent-neutral-900" checked={speech.preferences.timestamps === true}
+          disabled={disabled || busy} onChange={event => setSpeechPreferences({ timestamps: event.target.checked })} data-vivic-word-timing />
+        请求逐词字幕（需语音服务支持，默认关闭）
+      </label>}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {voiceConfig.tts === "stepfun" && <div className="sm:col-span-2">
           <label htmlFor="vivic-tts-voice" className="text-xs text-neutral-700">音色</label>

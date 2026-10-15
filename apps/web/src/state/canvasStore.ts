@@ -59,7 +59,7 @@ export interface VivicState {
   viewportSize: { width: number; height: number } | null;
   highlight: HighlightState | null;
   subtitle: SubtitleState | null;
-  activity: { requestId: string; text: string; expiresAt: number; phase?: "thinking" | "preparing-speech" | "speaking" | "listening" | "transcribing" } | null;
+  activity: import("@vivic/contracts").SerializedVivicState["activity"];
   ambient: { preset: "grainient" | "clouds" | "clouds2"; theme: ThemeMode };
   viewport: Viewport;
   /** One-shot effect pings for the view layer. */

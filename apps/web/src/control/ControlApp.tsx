@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { buildCanvasContext, postIntent } from "@/ai/api";
-import { cancelSpeech, speakText, subscribeSpeech, getSpeechSnapshot } from "@/ai/speech";
+import { cancelSpeech, speakText, subscribeSpeech, getSpeechSnapshot, speakShortFeedback, cancelShortFeedback } from "@/ai/speech";
+import { speechDisplayFrame, type SpeechRange } from "@/ai/speechTelemetry";
 import { clarifiedCardAction, parseCommand, type CommandResult } from "@/commands/parse";
 import type { ResolvedCard } from "@/commands/references";
 import { applyUrlTheme } from "@/lib/urlTheme";
@@ -55,6 +56,9 @@ export const ControlApp = () => {
     controller: AbortController;
     slowTimer: ReturnType<typeof setTimeout>;
     deadlineTimer: ReturnType<typeof setTimeout>;
+    feedbackTimer: ReturnType<typeof setTimeout>;
+    expiresAt: number;
+    text: string;
   } | null>(null);
   const reminderQueue = useRef<ReminderNotice[]>([]);
   const announcing = useRef(false);
@@ -70,6 +74,7 @@ export const ControlApp = () => {
     current.controller.abort();
     clearTimeout(current.slowTimer);
     clearTimeout(current.deadlineTimer);
+    clearTimeout(current.feedbackTimer);
     host?.setActivity(current.requestId, null);
     setBusy(false);
     setFeedback("已取消本次请求");
@@ -86,16 +91,30 @@ export const ControlApp = () => {
   useEffect(() => {
     if (!host) return;
     let voiceActivityId: string | null = null;
+    let lastSpeechRange: SpeechRange | null = null;
     const update = () => {
-      const speech = getSpeechSnapshot() as ReturnType<typeof getSpeechSnapshot> & { requestId?: string; text?: string };
-      if (pending.current || isVoiceInputBusy() || host.getSnapshot().ownerMode !== "owner") return;
+      const speech = getSpeechSnapshot();
+      if (isVoiceInputBusy() || host.getSnapshot().ownerMode !== "owner") return;
       const live = speech.status === "loading" || speech.status === "playing";
+      if (pending.current && (!live || speech.kind !== "phrase" || speech.status === "loading")) {
+        if (voiceActivityId) {
+          host.setActivity(voiceActivityId, null); voiceActivityId = null;
+          const current = pending.current;
+          host.setActivity(current.requestId, { requestId: current.requestId, text: current.text, phase: "thinking", expiresAt: current.expiresAt });
+        }
+        return;
+      }
       if (live && speech.requestId) {
         const requestId = `voice_${speech.requestId}`.slice(0, 128);
+        if (voiceActivityId !== requestId) lastSpeechRange = null;
         voiceActivityId = requestId;
+        const frame = speechDisplayFrame(speech.text || "正在说话…", speech.wordRange, lastSpeechRange);
+        if (speech.wordRange) lastSpeechRange = speech.wordRange;
         host.setActivity(requestId, { requestId,
-          text: speech.status === "loading" ? "正在准备语音…" : (speech.text ?? "").slice(0, 120) || "正在说话…",
+          text: speech.status === "loading" ? "正在准备语音…" : frame.text,
           phase: speech.status === "loading" ? "preparing-speech" : "speaking",
+          ...(speech.status === "playing" ? { speech: { amplitude: speech.amplitude,
+            ...(frame.wordStart !== undefined ? { wordStart: frame.wordStart, wordEnd: frame.wordEnd } : {}) } } : {}),
           expiresAt: Date.now() + 6000,
         });
       } else if (voiceActivityId) {
@@ -305,12 +324,18 @@ export const ControlApp = () => {
         canvasId: activeCanvasId,
         controller,
         deadlineTimer: setTimeout(() => controller.abort(new DOMException("请求超时", "TimeoutError")), INTENT_TIMEOUT_MS),
+        feedbackTimer: setTimeout(() => {
+          if (isCurrent()) void speakShortFeedback("我看看", { requestId: `${requestId}:checking`, signal: controller.signal });
+        }, 300),
         slowTimer: setTimeout(() => {
           if (!isCurrent()) return;
           const text = "响应较慢，仍在处理…";
+          pending.current!.text = text;
           setFeedback(text);
           host.setActivity(requestId, { requestId, text, expiresAt, phase: "thinking" });
+          void speakShortFeedback("稍等", { requestId: `${requestId}:slow`, signal: controller.signal });
         }, 5000),
+        expiresAt, text: "让我想想…",
       };
       setBusy(true);
       setFeedback("正在理解你的指令…");
@@ -328,6 +353,7 @@ export const ControlApp = () => {
             continuation,
           );
           if (!isCurrent()) return;
+          cancelShortFeedback(requestId);
           setBackendOnline(true);
           if (result.kind === "envelope" && result.envelope) {
             const res = host.dispatch(result.envelope);
@@ -360,6 +386,7 @@ export const ControlApp = () => {
           }
         } catch (error) {
           if (!isCurrent()) return;
+          cancelShortFeedback(requestId);
           if (error instanceof DOMException && error.name === "TimeoutError") {
             setFeedback("本次请求超时，请重试。");
             publishFeedback(host, "本次请求超时，请重试。");
@@ -371,8 +398,10 @@ export const ControlApp = () => {
           setFeedback((prev) => (prev ? `离线本地模式 · ${prev}` : prev));
         } finally {
           if (pending.current?.requestId === requestId) {
+            cancelShortFeedback(requestId);
             clearTimeout(pending.current.slowTimer);
             clearTimeout(pending.current.deadlineTimer);
+            clearTimeout(pending.current.feedbackTimer);
             pending.current = null;
             host.setActivity(requestId, null);
             setBusy(false);

@@ -141,7 +141,7 @@ describe("speech player lifecycle (offline, no server)", () => {
     let deliver!: (blob: Blob) => void;
     const body = new Promise<Blob>((resolve) => { deliver = resolve; });
     const reading = vi.fn(() => body);
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, blob: reading })));
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, headers: new Headers({ "content-type": "audio/mpeg" }), blob: reading })));
     const speech = await loadSpeech();
     speech.setSpeechEnabled(true);
     const pending = speech.speakText("你好", { requestId: "one" });
@@ -298,7 +298,7 @@ describe("speech preferences and audition", () => {
 
   it.each([
     { voice: "unknown" }, { speed: 0.4 }, { speed: 2.1 }, { speed: NaN },
-    { volume: -0.1 }, { volume: 1.1 }, { volume: Infinity },
+    { volume: -0.1 }, { volume: 1.1 }, { volume: Infinity }, { timestamps: "yes" },
   ])("rejects invalid settings without persisting: %j", async (patch) => {
     const speech = await loadSpeech();
     expect(speech.setSpeechPreferences(patch)).toBe(false);
@@ -326,6 +326,39 @@ describe("speech preferences and audition", () => {
     expect(speech.getSpeechSnapshot()).toMatchObject({ enabled: false, requestId: "audition", kind: "preview", playing: false, loading: false });
     speech.cancelSpeech();
     expect(speech.getSpeechSnapshot()).toMatchObject({ requestId: null, text: null, kind: null });
+  });
+
+  it("requests timestamps only after explicit preference opt-in and cancels obsolete synthesis", async () => {
+    const speech = await loadSpeech();
+    expect(speech.getSpeechSnapshot().preferences.timestamps).not.toBe(true);
+    expect(speech.setSpeechPreferences({ timestamps: true })).toBe(true);
+    expect(JSON.parse(stored.get("vivic.speech.preferences.v1")!).timestamps).toBe(true);
+    const first = speech.previewSpeech({ requestId: "timed-preview" });
+    await vi.waitFor(() => expect(speech.getSpeechSnapshot().playing).toBe(true));
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]![1]?.body)).timestamps).toBe(true);
+    speech.setSpeechPreferences({ timestamps: false });
+    expect(await first).toEqual({ status: "cancelled" });
+    const second = speech.previewSpeech({ requestId: "ordinary-preview" });
+    await vi.waitFor(() => expect(speech.getSpeechSnapshot().playing).toBe(true));
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[1]![1]?.body))).not.toHaveProperty("timestamps");
+    FakeAudio.instances[1]!.onended!();
+    expect(await second).toEqual({ status: "completed" });
+  });
+
+  it("keeps fixed short cues silent by default, uses only local files, and cancels only their owning request", async () => {
+    const speech = await loadSpeech();
+    expect(await speech.speakShortFeedback("我看看", { requestId: "plan:checking" })).toEqual({ status: "skipped" });
+    expect(fetch).not.toHaveBeenCalled();
+    speech.setSpeechEnabled(true);
+    const pending = speech.speakShortFeedback("我看看", { requestId: "plan:checking" });
+    await vi.waitFor(() => expect(speech.getSpeechSnapshot().playing).toBe(true));
+    expect(vi.mocked(fetch).mock.calls[0]).toMatchObject(["/voice-feedback/checking.mp3", { method: "GET" }]);
+    expect(vi.mocked(fetch).mock.calls[0]![1]?.body).toBeUndefined();
+    expect(speech.getSpeechSnapshot().source).toBe("prerecorded");
+    speech.cancelShortFeedback("another-plan"); expect(speech.getSpeechSnapshot().playing).toBe(true);
+    speech.cancelShortFeedback("plan"); expect(await pending).toEqual({ status: "cancelled" });
+    expect(speech.getSpeechSnapshot()).toMatchObject({ source: null, amplitude: 0, wordRange: null });
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it("changing synthesis settings cancels audition and does not generate another request", async () => {
