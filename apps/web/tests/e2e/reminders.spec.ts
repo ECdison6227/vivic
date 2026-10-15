@@ -4,7 +4,7 @@ import path from "node:path";
 import { activeCanvasId, sendCommand } from "./helpers1";
 
 test.use({ video: { mode: "on", size: { width: 1440, height: 900 } } });
-const evidence = path.resolve(process.cwd(), "../../evidence/phase2-reminders");
+const evidence = path.resolve(process.cwd(), "../../evidence/manual-feedback/reminders");
 test.beforeEach(async ({ page }) => {
   await page.goto("/control");
   await expect(page.locator('[data-vivic-control]')).toHaveAttribute("data-vivic-owner", "owner");
@@ -17,12 +17,12 @@ test("one sentence creates three real reminders, all fire visually and survive r
   await sendCommand(page, "6秒后提醒我喝水，8秒后提醒我休息，10秒后提醒我开会");
   await expect(page.locator('[data-vivic-command-feedback]')).toContainText("3 项提醒");
   await expect(page.locator('[data-vivic-reminder]')).toHaveCount(3);
-  await expect(display.locator('[data-card-id]')).toHaveCount(3);
-  const cardTexts = await display.locator('[data-card-id]').allTextContents();
-  expect(cardTexts.every(text => /^[\d:\s]+$/.test(text))).toBe(true);
+  await expect(display.locator('[data-card-id]')).toHaveCount(1);
+  await expect(display.locator('[data-vivic-reminder-row]')).toHaveCount(3);
+  await expect(display.locator('[data-vivic-reminder-list]')).toContainText("喝水");
   await expect(page.locator('[data-vivic-reminder-notice]')).toHaveCount(3, { timeout: 15000 });
   await expect(display.locator('[data-vivic-reminder-alert]')).toContainText("开会");
-  await expect(display.locator('[data-vivic-reminder-glow="true"]')).toHaveCount(1);
+  await expect(display.locator('[data-card-id]')).toHaveCount(0);
   fs.mkdirSync(evidence, { recursive: true });
   await page.screenshot({ path: path.join(evidence, "three-reminders-control.png"), fullPage: true });
   await display.screenshot({ path: path.join(evidence, "due-reminder-display.png") });

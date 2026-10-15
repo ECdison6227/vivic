@@ -1,3 +1,6 @@
+import { presentCards } from "./reminderPresentation";
+import { ReminderListView } from "@/cards/ReminderListView";
+import type { CountdownCard } from "@/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
@@ -25,6 +28,8 @@ const EXIT_ANIMATION_MS = 260;
 
 interface VivicNodeData extends Record<string, unknown> {
   entry: CardState;
+  reminders?: CountdownCard[];
+  focusedId?: string;
   focused: boolean;
   dimmed: boolean;
   highlight: HighlightState | null;
@@ -42,7 +47,7 @@ const VivicNode = ({ data }: NodeProps<Node<VivicNodeData>>) => {
       data-exiting={entry.exitingRequestId ? true : undefined}
       style={{ width: entry.record.layout.width }}
     >
-      <VivicCard record={entry.record} highlight={highlight} />
+      {data.reminders ? <ReminderListView cards={data.reminders} focusedId={data.focusedId} highlightedId={highlight?.cardId} /> : <VivicCard record={entry.record} highlight={highlight} />}
     </div>
   );
 };
@@ -76,7 +81,7 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
 
   const nodes = useMemo<Array<Node<VivicNodeData>>>(
     () =>
-      cards.map((entry) => {
+      presentCards(cards).map(({ entry, reminders, memberIds }) => {
         const override = dragOverrides[entry.record.id];
         return {
           id: entry.record.id,
@@ -90,10 +95,10 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
           draggable: !entry.record.layout.pinned && !entry.exitingRequestId,
           selectable: false,
           data: {
-            entry,
-            focused: focus?.cardId === entry.record.id,
-            dimmed: Boolean(focus) && focus?.cardId !== entry.record.id,
-            highlight: highlight?.cardId === entry.record.id ? highlight : null,
+            entry, reminders, focusedId: focus?.cardId,
+            focused: Boolean(focus && memberIds.includes(focus.cardId)),
+            dimmed: Boolean(focus && !memberIds.includes(focus.cardId)),
+            highlight: highlight && memberIds.includes(highlight.cardId) ? highlight : null,
           },
         };
       }),
@@ -194,9 +199,7 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
   // Never touches card content or variant.
   useEffect(() => {
     if (focus) {
-      const entry = canvasStore
-        .getState()
-        .cards.find((c) => c.record.id === focus.cardId);
+      const entry = presentCards(canvasStore.getState().cards).find(group => group.memberIds.includes(focus.cardId))?.entry;
       if (entry) {
         const { x, y, width, height } = entry.record.layout;
         const zoom = Math.min(

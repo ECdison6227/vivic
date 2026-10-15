@@ -59,6 +59,9 @@ export const matchRules = (rawText: string, ctx: CanvasContext): RuleHit | null 
   const withAwaken = (actions: Action[]): Action[] =>
     ctx.stage === "STANDBY" ? [{ type: "stage.awaken" }, ...actions] : actions;
 
+  if (/^(?:请)?(?:(?:删除|删掉|移除|清空)(?:当前画布(?:上|中)?(?:的)?)?(?:所有|全部)(?:的)?卡片|清空(?:当前)?画布|把(?:所有|全部)(?:的)?卡片(?:全部|都)?(?:删除|删掉|移除|清空))[。！!]?$/u.test(input) && ctx.cards.length) {
+    return { actions: [{ type: "cards.delete", targetIds: ctx.cards.map(card => card.id) }], spokenText: "已删除当前画布全部卡片，可撤销" };
+  }
   if (/^(显示全部|全部显示|看全部|适应画布|fit)$/i.test(input)) {
     return {
       actions: withAwaken([{ type: "canvas.fit" }]),

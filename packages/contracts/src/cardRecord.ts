@@ -41,7 +41,7 @@ export const CountdownSourceDataSchema = z.strictObject({
   targetAt: z.iso.datetime(),
   startedAt: z.iso.datetime().optional(),
   pausedAt: z.iso.datetime().nullable().optional(),
-  /** Kept off the minimal card; used by control and the due-time announcement. */
+  /** Validated task text for the reminder list, Control and due announcement. */
   reminderText: z.string().min(1).max(160).optional(),
   notifiedAt: z.iso.datetime().nullable().optional(),
   schedule: ReminderScheduleSchema.nullable().optional(),
@@ -55,8 +55,8 @@ export const CountdownSourceDataSchema = z.strictObject({
 export const CountdownCardSchema = z.strictObject({
   ...CommonShape,
   type: z.literal("CountdownCard"),
-  // Minimal countdown renders digits only; displayProps MUST stay empty so no
-  // title / description / footer / advice can ever reach the card.
+  // Pure timers render digits; named reminders use sourceData.reminderText in
+  // the shared reminder list. No arbitrary title/footer/advice display fields.
   displayProps: z.strictObject({}),
   sourceData: CountdownSourceDataSchema,
 });

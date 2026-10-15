@@ -1,6 +1,7 @@
 import type { CardRecord } from "@/contracts";
 import type { VivicState } from "@/state/canvasStore";
 import { zhToNumber } from "./zhNumber";
+import { completedCountdown } from "@/canvas/reminderPresentation";
 
 /**
  * Natural-language reference resolution (CARD_CONTRACT §4). Chinese-first
@@ -54,7 +55,7 @@ export type Resolution =
   | { kind: "none"; reason?: string };
 
 const liveCards = (state: VivicState): CardRecord[] =>
-  state.cards.filter((c) => !c.exitingRequestId).map((c) => c.record);
+  state.cards.filter((c) => !c.exitingRequestId && !completedCountdown(c)).map((c) => c.record);
 
 const positionOf = (
   card: CardRecord,

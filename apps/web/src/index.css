@@ -1460,3 +1460,11 @@
     transition-duration: 0.01ms;
   }
 }
+
+/* Named reminders share one existing card shell; bare timers keep digits only. */
+.vivic-reminder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1.25rem; align-items: center; min-height: 56px; }
+.vivic-reminder-row + .vivic-reminder-row { border-top: 1px solid color-mix(in oklab, var(--border) 45%, transparent); }
+.vivic-reminder-row > [data-aui="text"] { font-size: 1.125rem; line-height: 1.5; overflow-wrap: anywhere; }
+.vivic-reminder-time { display: grid; justify-items: end; }
+.vivic-reminder-time [data-aui="text"] { font-size: 1.875rem; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; white-space: nowrap; }
+.vivic-reminder-row[data-reminder-focused] > [data-aui="text"] { font-weight: 650; }

@@ -1,3 +1,4 @@
+import { presentCards } from "@/canvas/reminderPresentation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import SiriOrb from "@/components/smoothui/siri-orb";
@@ -52,10 +53,8 @@ export const OrbLayer = () => {
 
   const feedbackSpot = useMemo(() => {
     if (!feedback || screen.width === 0) return null;
-    const cards = canvasStore
-      .getState()
-      .cards.filter((c) => !c.exitingRequestId)
-      .map((c) => cardToScreenRect(c.record.layout, viewport));
+    const cards = presentCards(canvasStore.getState().cards).map(item => item.entry)
+      .filter(c => !c.exitingRequestId).map(c => cardToScreenRect(c.record.layout, viewport));
     const { anchor } = chooseOrbAnchor({
       screenWidth: screen.width,
       screenHeight: screen.height,

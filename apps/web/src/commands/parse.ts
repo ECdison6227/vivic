@@ -4,6 +4,7 @@ import type { VivicState } from "@/state/canvasStore";
 import { resolveReference, type ResolvedCard } from "./references";
 import { zhToNumber } from "./zhNumber";
 import { resumeReminderSource } from "@/reminders/reminders";
+import { completedCountdown } from "@/canvas/reminderPresentation";
 
 export { zhToNumber };
 
@@ -119,6 +120,12 @@ export const parseCommand = (
   const now = ctx.now?.() ?? Date.now();
   if (!input) return { kind: "unknown", message: "请输入指令" };
 
+  if (/^(?:请)?(?:(?:删除|删掉|移除|清空)(?:当前画布(?:上|中)?(?:的)?)?(?:所有|全部)(?:的)?卡片|清空(?:当前)?画布|把(?:当前画布(?:上|中)?(?:的)?)?(?:所有|全部)(?:的)?卡片(?:全部|都)?(?:删除|删掉|移除|清空))[。！!]?$/u.test(input)) {
+    const targetIds = ctx.state.cards.filter(card => !card.exitingRequestId).map(card => card.record.id);
+    return targetIds.length ? { kind: "envelope", actions: [{ type: "cards.delete", targetIds }], spokenText: `已删除当前画布的全部 ${targetIds.length} 张卡片，可撤销`, description: "删除全部卡片" }
+      : { kind: "unknown", message: "当前画布已经没有卡片。" };
+  }
+
   const todoUpdate = input.match(/^(?:请)?(?:把|将)?(?:第([一二两三四五六七八九十\d]+)张)?待办(?:卡片)?(?:的)?第([一二两三四五六七八九十\d]+)项(?:标记为|设为|改为)?(完成|已完成|未完成|取消完成)[。！!]?$/);
   if (todoUpdate) {
     const todos = ctx.state.cards.filter(c => !c.exitingRequestId && c.record.type === "TodoCard");
@@ -135,7 +142,7 @@ export const parseCommand = (
 
   const timerState = input.match(/^(暂停|继续|恢复)(.*(?:提醒|倒计时))[。！!]?$/);
   if (timerState && !/然后|并且|同时|不要|[，,；;\n]/.test(input)) {
-    const reference = timerState[2]!, timerCards = ctx.state.cards.filter(card => card.record.type === "CountdownCard" && !card.exitingRequestId);
+    const reference = timerState[2]!, timerCards = ctx.state.cards.filter(card => card.record.type === "CountdownCard" && !card.exitingRequestId && !completedCountdown(card));
     const name = reference.replace(/(?:的)?(?:提醒|倒计时)$/, "");
     const named = timerCards.filter(card => card.record.type === "CountdownCard" && (card.record.sourceData.reminderText === name || card.record.metadata.aliases?.includes(name)));
     const generic = /^(?:(?:这|那)(?:个|张)?|刚才(?:那个)?|最近|左边(?:的)?|右边(?:的)?|第[一二两三四五六七八九十\d]+(?:个|张)(?:的)?)?(?:提醒|倒计时)$/.test(reference);

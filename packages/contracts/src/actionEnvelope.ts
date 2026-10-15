@@ -10,6 +10,7 @@ export const ActionSchema = z.discriminatedUnion("type", [
     card: CardRecordSchema,
   }),
   z.strictObject({ type: z.literal("card.delete"), targetId: id }),
+  z.strictObject({ type: z.literal("cards.delete"), targetIds: z.array(id).min(1).max(1000).refine(ids => new Set(ids).size === ids.length) }),
   z.strictObject({ type: z.literal("card.focus"), targetId: id }),
   z.strictObject({
     type: z.literal("card.highlight"),

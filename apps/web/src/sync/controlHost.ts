@@ -506,7 +506,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
         // displays perform after their animation is committed instantly here
         // — otherwise the undo stack would fill late and a quick 撤销 click
         // would find nothing to restore.
-        if (envelope.actions.some((a) => a.type === "card.delete")) {
+        if (envelope.actions.some((a) => a.type === "card.delete" || a.type === "cards.delete")) {
           store.internal({
             type: "card.delete.commit",
             requestId: envelope.requestId,

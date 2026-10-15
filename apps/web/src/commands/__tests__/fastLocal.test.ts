@@ -1,3 +1,4 @@
+import { createCanvasStore } from "@/state/canvasStore";
 import { describe, expect, it } from "vitest";
 import { fastLocalCommand, parseCommand } from "../parse";
 import { emptyVivicState } from "@/persistence/canvasRecord";
@@ -25,4 +26,16 @@ describe("exact local actions bypass the decision and LLM network", () => {
   it.each(["十分钟倒计时", "待办：测试", "上海天气", "帮我安排待办优先级"])("leaves extraction/data work %s to its owning adapter", text => {
     expect(fastLocalCommand(text, ctx)).toBeNull();
   });
+});
+
+it("deletes every card locally and restores the whole 60-card batch with one undo", () => {
+  const state = { ...ctx.state, cards: Array.from({ length: 60 }, (_, i) => ({ record: { ...testCards.TodoCard, id: `TEST-${i}` } })) };
+  const result = fastLocalCommand("删除所有卡片", { ...ctx, state });
+  expect(result?.kind).toBe("envelope");
+  if (result?.kind !== "envelope") throw new Error("missing local deletion");
+  const store = createCanvasStore(); store.loadState(state);
+  expect(store.dispatch({ schemaVersion: "0.6", canvasId: "TEST", requestId: "all", actions: result.actions }).ok).toBe(true);
+  store.internal({ type: "card.delete.commit", requestId: "all" }); expect(store.getState().cards).toHaveLength(0);
+  store.internal({ type: "undo" }); expect(store.getState().cards).toHaveLength(60);
+  expect(fastLocalCommand("不要删除所有卡片", { ...ctx, state })).toBeNull();
 });

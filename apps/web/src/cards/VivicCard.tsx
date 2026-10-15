@@ -1,3 +1,4 @@
+import { ReminderListView } from "./ReminderListView";
 import type { CardRecord } from "@/contracts";
 import type { HighlightState } from "@/state/canvasStore";
 import { CountdownCardView } from "./CountdownCardView";
@@ -22,7 +23,7 @@ export const VivicCard = ({
 }) => {
   switch (record.type) {
     case "CountdownCard":
-      return <CountdownCardView card={record} />;
+      return record.sourceData.reminderText ? <ReminderListView cards={[record]} highlightedId={highlight?.cardId} /> : <CountdownCardView card={record} />;
     case "TodoCard":
       return (
         <TodoCardView

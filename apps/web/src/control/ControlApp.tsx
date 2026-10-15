@@ -234,6 +234,7 @@ export const ControlApp = () => {
   const applyResult = useCallback(
     (h: ControlHost, result: CommandResult) => {
       const { activeCanvasId } = h.getSnapshot();
+      setClarify(null); setSuggestions([]);
       if (result.kind === "unknown") {
         setFeedback(result.message);
         publishFeedback(h, result.message);
@@ -283,7 +284,7 @@ export const ControlApp = () => {
       const snap = host.getSnapshot();
       if (!snap.activeCanvasId || snap.ownerMode !== "owner") return;
       cancelPending();
-      setClarify(null);
+      setClarify(null); setSuggestions([]);
       const activeCanvasId = snap.activeCanvasId;
       const trimmed = text.trim();
       const previous = previousQuestion.current;

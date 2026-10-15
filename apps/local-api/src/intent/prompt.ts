@@ -21,7 +21,7 @@ card.focus只改变镜头，放大/聚焦绝不隐式改变variant。展开/收�
 {"type":"canvas.fit"}；{"type":"canvas.restore"}。
 单卡可focus。创建多卡统一结尾canvas.fit，禁止逐卡focus。总动作最多12个。
 CardRecord={"id":"唯一短id","type":"类型","variant":"minimal","displayProps":{},"sourceData":{},"sources":[],"layout":{"x":0,"y":0,"width":264,"height":120,"pinned":false},"metadata":{"createdAt":"ISO","updatedAt":"ISO"}}。多卡位置错开。
-CountdownCard：displayProps只能{}；sourceData={"targetAt":"ISO","startedAt":"ISO","pausedAt":null或ISO,"reminderText":"用户原文提醒内容，1到160字，可选"}。notifiedAt仅由调度器写，新建省略，修改targetAt时程序会清空。只显示数字；提醒事项放reminderText，不能丢失。暂停/继续仅在时长和状态可确定时更新。
+CountdownCard：displayProps只能{}；sourceData={"targetAt":"ISO","startedAt":"ISO","pausedAt":null或ISO,"reminderText":"用户原文提醒内容，1到160字，可选"}。notifiedAt仅由调度器写，新建省略，修改targetAt时程序会清空。纯计时器只显示数字；带事项提醒由客户端合并显示事项和时间，事项放reminderText，不能丢失。暂停/继续仅在时长和状态可确定时更新。
 TodoCard：displayProps={"items":[{"id":"item-1","text":"1到160字","done":false}]}，1到12项；sourceData={}。
 NoteCard：displayProps={"text":"最多500字"}或{"bullets":["每条最多180字，最多5条"]}；sourceData={}。
 本次规划器不能自行联网。禁止创建或修改 WeatherCard、TableCard、ChartCard、SearchResultCard 的数据，不能伪造天气、搜索来源、表格或图表数据，示例也不行；真实数据由专用适配器提供。可聚焦/删除/整卡高亮已有七类卡片，目标必须来自上下文。无法完成的查询返回actions=[]并诚实说明。

@@ -1,6 +1,7 @@
 import type { ActionEnvelope } from "@/contracts";
 import type { CardState, VivicState } from "@/state/canvasStore";
 import type { Attachment } from "./attachments";
+import { completedCountdown } from "@/canvas/reminderPresentation";
 
 /**
  * Browser-side client for the local decision API. All traffic is same-origin
@@ -83,7 +84,7 @@ export const buildCanvasContext = (
   viewport: state.viewport,
   focusHistory: state.focusHistory,
   cards: state.cards
-    .filter((c) => !c.exitingRequestId)
+    .filter((c) => !c.exitingRequestId && !completedCountdown(c))
     .map((entry) => ({
       id: entry.record.id,
       type: entry.record.type,

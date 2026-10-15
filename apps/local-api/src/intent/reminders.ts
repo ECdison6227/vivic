@@ -63,7 +63,7 @@ export const parseExactReminders = (raw: string): Reminder[] | null => {
     // Only an explicit enumeration is deterministic. Conjunctions/conditions
     // can change meaning, so the model must extract or ask for clarification.
     const items = m[2]!.split("、").map((s) => s.trim());
-    if (seconds === null || items.some((s) => !s || s.length > 160 || /和|以及|然后|如果|再|提醒|倒计时|并|或者|还是|每天|每隔|重复|不要|别|不用|取消/.test(s))) return null;
+    if (seconds === null || items.some((s) => !s || s.length > 160 || /和|以及|然后|如果|再|提醒|倒计时|并且|或者|还是|每天|每隔|重复|不要|别|不用|取消/.test(s))) return null;
     reminders.push(...items.map((text) => ({ afterSeconds: seconds, text })));
   }
   return reminders.length > 0 && reminders.length <= MAX_REMINDERS ? reminders : null;

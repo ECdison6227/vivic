@@ -1,3 +1,4 @@
+import { presentCards, groupedReminder, completedCountdown } from "@/canvas/reminderPresentation";
 import { useSyncExternalStore } from "react";
 import {
   ActionEnvelopeSchema,
@@ -110,14 +111,14 @@ const cardHeight = ({ record }: CardState): number => {
   return Math.max(record.layout.height, record.type === "ChartCard" ? 176 : record.type === "SearchResultCard" ? 112 : 96);
 };
 /** Persisted layout bounds, using the same conservative content heights as placement. */
-export const hasUnpinnedOverlap = (cards: CardState[]): boolean => cards.some((left, index) => !left.exitingRequestId && cards.slice(index + 1).some(right => {
+export const hasUnpinnedOverlap = (cards: CardState[]): boolean => presentCards(cards).some(({ entry: left }, index, visible) => !left.exitingRequestId && visible.slice(index + 1).some(({ entry: right }) => {
   if (right.exitingRequestId || (left.record.layout.pinned && right.record.layout.pinned)) return false;
   const a = left.record.layout, b = right.record.layout;
   return a.x < b.x + b.width && a.x + a.width > b.x
     && a.y < b.y + cardHeight(right) && a.y + cardHeight(left) > b.y;
 }));
 /** Dimension-aware grid; pinned/restored layouts are obstacles, never moved. */
-export const relayout = (cards: CardState[], preserved: ReadonlySet<string> = new Set()): CardState[] => {
+const placeCards = (cards: CardState[], preserved: ReadonlySet<string> = new Set()): CardState[] => {
   const fixed = (entry: CardState) => entry.exitingRequestId || entry.record.layout.pinned || preserved.has(entry.record.id);
   const automatic = cards.filter(entry => !fixed(entry));
   const cellWidth = Math.max(DEFAULT_LAYOUT.width, ...automatic.map(entry => entry.record.layout.width));
@@ -149,6 +150,18 @@ export const relayout = (cards: CardState[], preserved: ReadonlySet<string> = ne
   });
 };
 
+export const relayout = (cards: CardState[], preserved: ReadonlySet<string> = new Set()): CardState[] => {
+  const view = presentCards(cards);
+  const fixed = new Set(preserved);
+  for (const group of view) if (group.memberIds.some(id => preserved.has(id))) fixed.add(group.entry.record.id);
+  const placed = placeCards(view.map(item => item.entry), fixed);
+  const layouts = new Map(view.flatMap((group, index) => group.memberIds.map(id => [id, placed[index]!.record.layout] as const)));
+  return cards.map(entry => {
+    const layout = layouts.get(entry.record.id);
+    return layout ? { ...entry, record: { ...entry.record, layout } } : entry;
+  });
+};
+
 const withProcessed = (state: VivicState, requestId: string): VivicState => ({
   ...state,
   processedRequestIds: [...state.processedRequestIds, requestId].slice(-MAX_PROCESSED),
@@ -177,6 +190,9 @@ const applyAction = (
           ),
         };
       return { ...state, cards: relayout([...state.cards, { record: action.card }]) };
+    }
+    case "cards.delete": {
+      return action.targetIds.reduce((next, targetId) => applyAction(next, { type: "card.delete", targetId }, requestId), state);
     }
     case "card.delete": {
       const index = state.cards.findIndex(
@@ -254,6 +270,7 @@ const applyAction = (
       const cards = state.cards.map((c, i) => i === index ? resized : c);
       return {
         ...state,
+        ...(completedCountdown(resized) && state.focus?.cardId === current.id ? { focus: null } : {}),
         cards: hasUnpinnedOverlap(cards) || action.variant !== undefined ? relayout(cards) : cards,
       };
     }
@@ -329,7 +346,7 @@ const maybeRequestFit = (
   if (state.focus) return state;
   const size = state.viewportSize;
   if (!size) return state;
-  const live = state.cards.filter((c) => !c.exitingRequestId);
+  const live = presentCards(state.cards).map(item => item.entry).filter(c => !c.exitingRequestId);
   if (live.length === 0) return state;
   const zoom = state.viewport.zoom || 1;
   const vis = {
@@ -398,7 +415,7 @@ const reduceInternal = (
         ...state,
         cards: relayout(remaining),
         pendingDeletes: rest,
-        undoStack: [...state.undoStack, ...removed].slice(-50),
+        undoStack: [...state.undoStack, ...removed].slice(-Math.max(50, removed.length)),
         focus: state.focus && removedIds.has(state.focus.cardId) ? null : state.focus,
         highlight:
           state.highlight && removedIds.has(state.highlight.cardId) ? null : state.highlight,
@@ -502,7 +519,11 @@ export const createCanvasStore = (): CanvasStore => {
         metadata: { ...entry.record.metadata, updatedAt: new Date().toISOString() },
       });
       if (!candidate.success) return { ok: false, error: "invalid-card" };
-      state = withProcessed({ ...state, cards: state.cards.map(c => c === entry ? { ...c, record: candidate.data } : c) }, requestId);
+      const grouped = action.kind === "card.move" && groupedReminder(entry) ? state.cards.filter(groupedReminder) : [entry];
+      const dx = candidate.data.layout.x - layout.x, dy = candidate.data.layout.y - layout.y;
+      const cards = state.cards.map(c => c === entry ? { ...c, record: candidate.data }
+        : grouped.includes(c) ? { ...c, record: { ...c.record, layout: { ...c.record.layout, x: c.record.layout.x + dx, y: c.record.layout.y + dy } } } : c);
+      state = withProcessed({ ...state, cards: action.kind === "card.move" ? cards : relayout(cards) }, requestId);
       emit();
       return { ok: true, deduplicated: false };
     },
