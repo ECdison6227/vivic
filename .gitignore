@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+test-results/
+playwright-report/
+coverage/
+evidence/
+.env
+.env.*
+# Downloaded models, isolated environments and local PoC output
+/.cache/
+__pycache__/
+*.py[cod]
+.venv/
+*.tsbuildinfo

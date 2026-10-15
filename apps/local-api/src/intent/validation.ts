@@ -1,0 +1,84 @@
+import { CountdownSourceDataSchema, TodoCardSchema, NoteCardSchema, type Action } from "@vivic/contracts";
+import type { CanvasContext } from "../schemas.js";
+
+const CREATABLE = new Set(["CountdownCard", "TodoCard", "NoteCard"]);
+// Data cards are created by verified adapters, but all seven registered
+// renderers support safe focus/delete/highlight of an existing card.
+const TARGETABLE = new Set([...CREATABLE, "SearchResultCard", "WeatherCard", "TableCard", "ChartCard"]);
+type Target = Pick<CanvasContext["cards"][number], "type" | "displayProps" | "sourceDataSummary">;
+
+/** Validate against the same sequential state the reducer will consume. */
+export const actionExecutionIssue = (actions: Action[], ctx: CanvasContext): string | null => {
+  const targets = new Map<string, Target>(ctx.cards.map((c) => [c.id, c]));
+  const usedIds = new Set(targets.keys());
+  for (const action of actions) {
+    if (action.type === "card.create") {
+      const { card } = action;
+      if (!CREATABLE.has(card.type)) return "尚未接入真实数据的卡片不能创建（Weather/Table/Chart/Search）";
+      if (usedIds.has(card.id)) return "新卡片 id 重复";
+      if (card.sources.length) return "没有联网数据源，不能虚构来源";
+      usedIds.add(card.id);
+      targets.set(card.id, { type: card.type, displayProps: card.displayProps, sourceDataSummary: card.sourceData });
+    } else if ("targetId" in action) {
+      const target = targets.get(action.targetId);
+      if (!target) return "目标卡片不存在或已删除，需澄清目标";
+      if (!TARGETABLE.has(target.type)) return "目标卡片尚不可渲染";
+      if (action.type === "card.delete") targets.delete(action.targetId);
+      if (action.type === "card.highlight" && action.itemId) {
+        const items = target.displayProps.items;
+        if (target.type !== "TodoCard" || !Array.isArray(items) || !items.some((item) => item?.id === action.itemId)) {
+          return "目标条目不存在";
+        }
+      }
+      if (action.type === "card.update") {
+        if (action.variant !== undefined) {
+          if (target.type !== "NoteCard") return "只有便笺（NoteCard）可以更新 variant，其他卡片需澄清";
+          if ((action.displayProps && Object.keys(action.displayProps).length) || (action.sourceData && Object.keys(action.sourceData).length)) {
+            return "便笺展开/收起仅改变 variant，不能同时改写展示内容或原文";
+          }
+          // Density-only actions preserve displayProps and sourceData exactly, including full original text.
+          continue;
+        }
+        if (!CREATABLE.has(target.type)) return "尚未接入真实数据的卡片不能修改数据";
+        if (!action.displayProps && !action.sourceData) return "更新必须包含字段";
+        // Match the reducer's shallow field merge, then revalidate the type's
+        // complete display/source data, including unknown-field rejection.
+        const display = { ...target.displayProps, ...action.displayProps };
+        const source = { ...target.sourceDataSummary, ...action.sourceData };
+        if (target.type === "CountdownCard") {
+          if (action.sourceData && "notifiedAt" in action.sourceData && !("targetAt" in action.sourceData)) return "提醒通知状态由调度器管理";
+          if (Object.keys(display).length || !CountdownSourceDataSchema.safeParse(source).success) return "倒计时字段不合法";
+        } else {
+          const schema = target.type === "TodoCard" ? TodoCardSchema.shape.displayProps : NoteCardSchema.shape.displayProps;
+          if (!schema.safeParse(display).success || (action.sourceData && Object.keys(action.sourceData).length)) return "更新字段不符合卡片类型";
+        }
+        targets.set(action.targetId, { ...target, displayProps: display, sourceDataSummary: source });
+      }
+    } else if (!["stage.awaken", "canvas.fit", "canvas.restore"].includes(action.type)) {
+      // canvas.switch/create cannot validate a target canvas with this request
+      // context. Other effects are not in this planner's executable subset.
+      return "动作不在当前规划器可执行范围";
+    }
+  }
+  return null;
+};
+
+/** A batch creation must produce one camera move instead of hopping per card. */
+export const normalizeBatchCamera = (actions: Action[]): Action[] => {
+  const created = actions.filter((a) => a.type === "card.create");
+  if (created.length <= 1) return actions;
+  return [...actions.filter((a) => a.type !== "card.focus" && a.type !== "canvas.fit" && a.type !== "canvas.restore"), { type: "canvas.fit" }];
+};
+
+/** The due-time scheduler owns notification stamps. New/re-timed countdowns
+ * must be eligible even if the model copied a stamp from canvas context. */
+export const normalizeReminderStamps = (actions: Action[]): Action[] => actions.map((action) => {
+  if (action.type === "card.create" && action.card.type === "CountdownCard") {
+    const { notifiedAt: _notifiedAt, ...sourceData } = action.card.sourceData;
+    return { ...action, card: { ...action.card, sourceData } };
+  }
+  if (action.type === "card.update" && action.sourceData && "targetAt" in action.sourceData) {
+    return { ...action, sourceData: { ...action.sourceData, notifiedAt: null } };
+  }
+  return action;
+});

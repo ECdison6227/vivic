@@ -1,0 +1,1149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vivic.local/contracts/card-record.schema.json",
+  "title": "Vivic CardRecord v0.6 (Minimal wire shape)",
+  "description": "Only minimal visible fields are defined; expanded views are explicit extensions in the runtime Zod registry. All card displayProps fields are closed.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "CountdownCard"
+        },
+        "variant": {
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object",
+          "properties": {
+            "targetAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "startedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "pausedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reminderText": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "notifiedAt": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "targetAt"
+          ],
+          "additionalProperties": false
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 15
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "variant",
+        "displayProps",
+        "sourceData",
+        "sources",
+        "layout",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "TodoCard"
+        },
+        "variant": {
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "done": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "text",
+                  "done"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 15
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "variant",
+        "displayProps",
+        "sourceData",
+        "sources",
+        "layout",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "WeatherCard"
+        },
+        "variant": {
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {
+            "tempC": {
+              "type": "number",
+              "minimum": -100,
+              "maximum": 65
+            },
+            "conditionIcon": {
+              "enum": [
+                "sun",
+                "cloud",
+                "rain",
+                "snow",
+                "wind",
+                "fog",
+                "storm",
+                "night"
+              ]
+            }
+          },
+          "required": [
+            "tempC",
+            "conditionIcon"
+          ],
+          "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 15
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "variant",
+        "displayProps",
+        "sourceData",
+        "sources",
+        "layout",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "NoteCard"
+        },
+        "variant": {
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "bullets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 180
+              },
+              "minItems": 0,
+              "maxItems": 5
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 15
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "variant",
+        "displayProps",
+        "sourceData",
+        "sources",
+        "layout",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "SearchResultCard"
+        },
+        "variant": {
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 140
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "sourceLabel": {
+              "type": "string",
+              "maxLength": 70
+            }
+          },
+          "required": [
+            "title",
+            "summary",
+            "sourceLabel"
+          ],
+          "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 15
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "variant",
+        "displayProps",
+        "sourceData",
+        "sources",
+        "layout",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "TableCard"
+        },
+        "variant": {
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 1,
+              "maxItems": 8
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 8
+              },
+              "minItems": 0,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "columns",
+            "rows"
+          ],
+          "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 15
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "variant",
+        "displayProps",
+        "sourceData",
+        "sources",
+        "layout",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "const": "ChartCard"
+        },
+        "variant": {
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {
+            "chartKind": {
+              "enum": [
+                "line",
+                "bar",
+                "pie"
+              ]
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 100
+            },
+            "xLabel": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "yLabel": {
+              "type": "string",
+              "maxLength": 60
+            }
+          },
+          "required": [
+            "chartKind",
+            "points"
+          ],
+          "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 15
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "variant",
+        "displayProps",
+        "sourceData",
+        "sources",
+        "layout",
+        "metadata"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

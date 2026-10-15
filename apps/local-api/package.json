@@ -1,0 +1,31 @@
+{
+  "name": "@vivic/local-api",
+  "private": true,
+  "version": "0.6.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@hono/node-server": "^1.19.7",
+    "@vivic/contracts": "workspace:*",
+    "hono": "^4.11.2",
+    "sharp": "0.35.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.21.0",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,113 @@
+import { z } from "zod";
+import { ActionEnvelopeSchema, VivicStateSchema } from "@/contracts";
+import { ActivitySchema } from "@vivic/contracts";
+
+/**
+ * BroadcastChannel('vivic:canvas:v1') message protocol — ARCHITECTURE §4.
+ * Every message carries {type, canvasId, epoch, version, seq, requestId}.
+ *  - hello: display announces presence; owner replies with snapshot
+ *  - snapshot-request: display asks for full state of a canvas
+ *  - snapshot: full serialized runtime state (VivicState) + title + version
+ *  - patch: one validated ActionEnvelope as dispatched by the control owner
+ *  - owner: ownership announcements (on/off/takeover heartbeat)
+ *
+ * `epoch` identifies one owner session; `seq` is a per-canvas in-epoch
+ * sequence; `version` increments per applied patch on that canvas.
+ */
+
+export const SYNC_CHANNEL_NAME = "vivic:canvas:v1";
+
+// Narrow, non-model interaction protocol; never accepts an ActionEnvelope.
+export const CoordinateSchema = z.number().finite().min(-100000).max(100000);
+export const LayoutBaselineSchema = z.strictObject({
+  x: CoordinateSchema, y: CoordinateSchema,
+  width: z.number().finite().positive(), height: z.number().finite().positive(),
+  pinned: z.boolean(),
+});
+export const CanvasInteractionSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("card.move"), cardId: z.string().min(1).max(128),
+    from: LayoutBaselineSchema, x: CoordinateSchema, y: CoordinateSchema }),
+  z.strictObject({ kind: z.literal("card.pin"), cardId: z.string().min(1).max(128),
+    from: LayoutBaselineSchema, pinned: z.boolean() }),
+]);
+export type CanvasInteraction = z.infer<typeof CanvasInteractionSchema>;
+export const DisplayPreferencesSchema = z.strictObject({
+  theme: z.enum(["auto", "light", "dark"]),
+  reducedMotion: z.boolean(), subtitles: z.boolean(),
+  dayStart: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
+  dayEnd: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
+});
+export type DisplayPreferences = z.infer<typeof DisplayPreferencesSchema>;
+export const DEFAULT_DISPLAY_PREFERENCES: DisplayPreferences = {
+  theme: "auto", reducedMotion: false, subtitles: true,
+};
+
+const msgBase = {
+  canvasId: z.string().max(128),
+  epoch: z.string().min(1).max(64),
+  version: z.number().int().min(0),
+  seq: z.number().int().min(0),
+  requestId: z.string().min(1).max(128),
+};
+
+export const SyncMessageSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    ...msgBase, type: z.literal("interaction"),
+    payload: z.strictObject({ ownerEpoch: z.string().min(1).max(64),
+      // Display is allowed to request a move only. Pin/settings stay Control-only.
+      interaction: CanvasInteractionSchema.options[0] }),
+  }),
+  z.strictObject({
+    ...msgBase,
+    type: z.literal("activity"),
+    payload: z.strictObject({
+      requestId: z.string().min(1).max(128),
+      activity: ActivitySchema.nullable(),
+    }),
+  }),
+  z.strictObject({
+    ...msgBase,
+    type: z.literal("hello"),
+    payload: z.strictObject({ role: z.enum(["display", "control"]) }),
+  }),
+  z.strictObject({
+    ...msgBase,
+    type: z.literal("snapshot-request"),
+    payload: z.strictObject({}),
+  }),
+  z.strictObject({
+    ...msgBase,
+    type: z.literal("snapshot"),
+    payload: z.strictObject({
+      title: z.string().min(1).max(120),
+      version: z.number().int().min(0),
+      vivicState: VivicStateSchema,
+      preferences: DisplayPreferencesSchema.optional(),
+      activeCanvasId: z.string().min(1).max(128).optional(),
+      ownerId: z.string().min(1).max(64).optional(),
+    }),
+  }),
+  z.strictObject({
+    ...msgBase,
+    type: z.literal("patch"),
+    payload: z.strictObject({ envelope: ActionEnvelopeSchema }),
+  }),
+  z.strictObject({
+    ...msgBase,
+    type: z.literal("owner"),
+    payload: z.strictObject({
+      status: z.enum(["on", "off", "takeover"]),
+      ownerId: z.string().min(1).max(64),
+    }),
+  }),
+]);
+
+export type SyncMessage = z.infer<typeof SyncMessageSchema>;
+
+export const parseSyncMessage = (raw: unknown): SyncMessage | null => {
+  const parsed = SyncMessageSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+};
+
+/** Display "not pinned to a canvas" sentinel. */
+export const ANY_CANVAS = "";

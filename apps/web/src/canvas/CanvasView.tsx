@@ -1,0 +1,262 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  type Node,
+  type NodeChange,
+  type NodeProps,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { VivicCard } from "@/cards/VivicCard";
+import {
+  canvasStore,
+  useVivicState,
+  useDisplayPreferences,
+  type CardState,
+  type FocusState,
+  type HighlightState,
+} from "@/state/canvasStore";
+import { beginCanvasDrag, commitCanvasDrag } from "@/sync/browserRuntime";
+import type { CanvasDrag } from "@/sync/displayClient";
+import { resolveTheme } from "@/motion/motionDirector";
+
+const EXIT_ANIMATION_MS = 260;
+
+interface VivicNodeData extends Record<string, unknown> {
+  entry: CardState;
+  focused: boolean;
+  dimmed: boolean;
+  highlight: HighlightState | null;
+}
+
+const VivicNode = ({ data }: NodeProps<Node<VivicNodeData>>) => {
+  const { entry, focused, dimmed, highlight } = data;
+  return (
+    <div
+      className="vivic-card"
+      data-card-id={entry.record.id}
+      data-focused={focused || undefined}
+      data-dimmed={dimmed || undefined}
+      data-highlighted={highlight?.cardId === entry.record.id || undefined}
+      data-exiting={entry.exitingRequestId ? true : undefined}
+      style={{ width: entry.record.layout.width }}
+    >
+      <VivicCard record={entry.record} highlight={highlight} />
+    </div>
+  );
+};
+
+const nodeTypes = { vivic: VivicNode };
+
+const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) => {
+  const rf = useReactFlow();
+  const cards = useVivicState((s) => s.cards);
+  const focus = useVivicState((s) => s.focus);
+  const highlight = useVivicState((s) => s.highlight);
+  const fitRequestId = useVivicState((s) => s.lastFitRequestId);
+  const preferences = useDisplayPreferences();
+  // StageRoot supplies the live clock; retain an initial local-time fallback
+  // for standalone mounts without reading an impure clock during render.
+  const [themeAt] = useState(() => new Date());
+  const [systemReducedMotion, setSystemReducedMotion] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setSystemReducedMotion(query.matches);
+    update(); query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const reducedMotion = preferences.reducedMotion || systemReducedMotion;
+  const dragRef = useRef<CanvasDrag | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dragOverrides, setDragOverrides] = useState<Record<string, { x: number; y: number }>>({});
+  const [measurements, setMeasurements] = useState<Record<string, { width: number; height: number }>>({});
+  const lastFocusRef = useRef<FocusState | null>(null);
+  const lastFitRef = useRef<string | null>(null);
+
+  const nodes = useMemo<Array<Node<VivicNodeData>>>(
+    () =>
+      cards.map((entry) => {
+        const override = dragOverrides[entry.record.id];
+        return {
+          id: entry.record.id,
+          type: "vivic",
+          position: override ?? {
+            x: entry.record.layout.x,
+            y: entry.record.layout.y,
+          },
+          width: entry.record.layout.width,
+          measured: measurements[entry.record.id],
+          draggable: !entry.record.layout.pinned && !entry.exitingRequestId,
+          selectable: false,
+          data: {
+            entry,
+            focused: focus?.cardId === entry.record.id,
+            dimmed: Boolean(focus) && focus?.cardId !== entry.record.id,
+            highlight: highlight?.cardId === entry.record.id ? highlight : null,
+          },
+        };
+      }),
+    [cards, focus, highlight, dragOverrides, measurements],
+  );
+
+  // A manual drag wins until the store picks up the committed position.
+  useEffect(() => {
+    const ids = new Set(cards.map(entry => entry.record.id));
+    setMeasurements(previous => Object.keys(previous).some(id => !ids.has(id))
+      ? Object.fromEntries(Object.entries(previous).filter(([id]) => ids.has(id))) : previous);
+    const drag = dragRef.current;
+    const current = drag && cards.find(c => c.record.id === drag.cardId && !c.exitingRequestId);
+    if (drag && current && Object.keys(drag.from).every(key =>
+      current.record.layout[key as keyof typeof drag.from] === drag.from[key as keyof typeof drag.from])) return;
+    dragRef.current = null;
+    setDragOverrides({});
+  }, [cards]);
+  useEffect(() => {
+    const cancel = () => { dragRef.current = null; setDragOverrides({}); };
+    window.addEventListener("blur", cancel);
+    window.addEventListener("pointercancel", cancel);
+    return () => {
+      window.removeEventListener("blur", cancel);
+      window.removeEventListener("pointercancel", cancel);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    };
+  }, []);
+
+  const onNodesChange = (changes: Array<NodeChange<Node<VivicNodeData>>>) => {
+    // Controlled nodes must retain React Flow's measured dimensions between
+    // position previews. Dropping them re-initializes a node on every drag tick.
+    setMeasurements(previous => {
+      let next = previous;
+      for (const change of changes) {
+        if (change.type !== "dimensions" || !change.dimensions || !cards.some(entry => entry.record.id === change.id)) continue;
+        const { width, height } = change.dimensions;
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) continue;
+        const before = next[change.id];
+        if (before?.width === width && before.height === height) continue;
+        next = { ...next, [change.id]: { width, height } };
+      }
+      return next;
+    });
+    setDragOverrides((prev) => {
+      let next = prev;
+      for (const change of changes) {
+        if (change.type === "position" && change.position && dragRef.current?.cardId === change.id)
+          next = { ...next, [change.id]: change.position };
+      }
+      return next;
+    });
+  };
+
+  // Delete exit animation commit (idempotent; second commit is a no-op).
+  const pendingDeletes = useVivicState((s) => s.pendingDeletes);
+  useEffect(() => {
+    const ids = Object.keys(pendingDeletes);
+    if (ids.length === 0) return;
+    const timers = ids.map((id) =>
+      setTimeout(
+        () => canvasStore.internal({ type: "card.delete.commit", requestId: id }),
+        EXIT_ANIMATION_MS,
+      ),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [pendingDeletes]);
+
+  // Highlight self-clears after its confirmed duration.
+  useEffect(() => {
+    if (!highlight) return;
+    const timer = setTimeout(
+      () => canvasStore.internal({ type: "highlight.clear", id: highlight.id }),
+      highlight.durationMs,
+    );
+    return () => clearTimeout(timer);
+  }, [highlight]);
+
+  // Report this window's canvas size so the reducer's auto-fit decision
+  // (post-card.create one-shot) can compare bounds against it.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const report = () =>
+      canvasStore.internal({
+        type: "canvas.viewportSize",
+        width: el.clientWidth,
+        height: el.clientHeight,
+      });
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Smooth camera: focus = setCenter on the card, restore = previous viewport.
+  // Never touches card content or variant.
+  useEffect(() => {
+    if (focus) {
+      const entry = canvasStore
+        .getState()
+        .cards.find((c) => c.record.id === focus.cardId);
+      if (entry) {
+        const { x, y, width, height } = entry.record.layout;
+        const zoom = Math.min(
+          1.4,
+          Math.max(focus.prevViewport.zoom, 1),
+        );
+        void rf.setCenter(x + width / 2, y + height / 2, {
+          zoom,
+          duration: reducedMotion ? 0 : 480,
+        });
+      }
+    } else if (lastFocusRef.current) {
+      void rf.setViewport(lastFocusRef.current.prevViewport, { duration: reducedMotion ? 0 : 420 });
+    }
+    lastFocusRef.current = focus;
+  }, [focus, rf, reducedMotion]);
+
+  useEffect(() => {
+    if (!fitRequestId || fitRequestId === lastFitRef.current) return;
+    lastFitRef.current = fitRequestId;
+    void rf.fitView({ duration: reducedMotion ? 0 : 450, padding: 0.3, minZoom: 0.05, maxZoom: 1.1 });
+  }, [fitRequestId, rf, reducedMotion]);
+
+  return (
+    <div ref={wrapperRef} className="absolute inset-0 z-10" data-vivic-canvas>
+      <ReactFlow
+        nodes={nodes}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onNodeDragStart={(_, node) => {
+          if (settleTimer.current) clearTimeout(settleTimer.current);
+          dragRef.current = beginCanvasDrag(node.id);
+        }}
+        onNodeDragStop={(_, node) => {
+          const drag = dragRef.current;
+          dragRef.current = null;
+          if (!drag || !commitCanvasDrag(drag, node.position.x, node.position.y)) {
+            setDragOverrides({}); return;
+          }
+          // Only a confirmed owner snapshot enters the store. If the request
+          // is dropped, abandon the preview rather than inventing saved state.
+          settleTimer.current = setTimeout(() => setDragOverrides({}), 1500);
+        }}
+        onMoveEnd={(_, viewport) =>
+          canvasStore.internal({ type: "canvas.viewport", viewport })
+        }
+        proOptions={{ hideAttribution: true }}
+        deleteKeyCode={null}
+        minZoom={0.05}
+        maxZoom={1.8}
+        colorMode={resolvedTheme ?? resolveTheme(preferences.theme, themeAt, preferences)}
+        fitView
+        fitViewOptions={{ padding: 0.25, minZoom: 0.05, maxZoom: 1 }}
+      />
+    </div>
+  );
+};
+
+export const CanvasView = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) => (
+  <ReactFlowProvider>
+    <CanvasInner resolvedTheme={resolvedTheme} />
+  </ReactFlowProvider>
+);

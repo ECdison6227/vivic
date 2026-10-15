@@ -1,0 +1,37 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { loadConfig, type LocalApiConfig } from "../src/config.js";
+import { testConfig, TEST_TOKEN } from "./helpers.js";
+
+const isolatedConfig = (env: NodeJS.ProcessEnv = {}) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vivic-timeouts-"));
+  try { return loadConfig({ VIVIC_LOCAL_TOKEN: TEST_TOKEN, ...env }, dir); }
+  finally { rmSync(dir, { recursive: true, force: true }); }
+};
+describe("independent request budgets", () => {
+  it("defaults to inference 45s, connection 12s and speech 15s", () => {
+    expect(isolatedConfig()).toMatchObject({ requestTimeoutMs: 45_000,
+      connectionTimeoutMs: 12_000, speechTimeoutMs: 15_000 });
+  });
+  it("overrides each budget independently", () => {
+    expect(isolatedConfig({ VIVIC_REQUEST_TIMEOUT_MS: "28000" })).toMatchObject({
+      requestTimeoutMs: 28_000, connectionTimeoutMs: 12_000, speechTimeoutMs: 15_000 });
+    expect(isolatedConfig({ VIVIC_CONNECTION_TIMEOUT_MS: "3000", VIVIC_SPEECH_TIMEOUT_MS: "5000" })).toMatchObject({
+      requestTimeoutMs: 45_000, connectionTimeoutMs: 3000, speechTimeoutMs: 5000 });
+  });
+  it.each(["NaN", "Infinity", "0", "-1", "", "0.5"])("rejects invalid override %j", (value) => {
+    expect(isolatedConfig({ VIVIC_REQUEST_TIMEOUT_MS: value, VIVIC_CONNECTION_TIMEOUT_MS: value,
+      VIVIC_SPEECH_TIMEOUT_MS: value })).toMatchObject({ requestTimeoutMs: 45_000,
+      connectionTimeoutMs: 12_000, speechTimeoutMs: 15_000 });
+  });
+  it("caps overrides at the 90s turn limit", () => {
+    expect(isolatedConfig({ VIVIC_REQUEST_TIMEOUT_MS: "900000" }).requestTimeoutMs).toBe(90_000);
+  });
+  it("keeps old configuration fixtures without new optional fields valid", () => {
+    const old: LocalApiConfig = testConfig();
+    expect(old.connectionTimeoutMs).toBeUndefined();
+    expect(old.speechTimeoutMs).toBeUndefined();
+  });
+});

@@ -1,0 +1,16 @@
+{
+  "name": "vivic",
+  "private": true,
+  "version": "0.6.0",
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "pnpm --filter @vivic/web dev",
+    "dev:api": "pnpm --filter @vivic/local-api dev",
+    "build": "pnpm --filter @vivic/web build",
+    "test": "pnpm --filter @vivic/web test && pnpm --filter @vivic/local-api test",
+    "test:live": "pnpm --filter @vivic/local-api test:live",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vivic.local/contracts/action-envelope.schema.json",
+  "title": "Vivic ActionEnvelope v0.6",
+  "description": "All actions are closed. card.update.displayProps requires per-type CardRegistry validation before application. card.update.variant is optional (minimal/standard/expanded); the execution boundary allows density updates for NoteCard targets only.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "0.6"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "canvasId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "spokenText": {
+      "type": "string",
+      "maxLength": 180
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "stage.awaken"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "card.create"
+              },
+              "card": {
+                "$ref": "card-record.schema.json"
+              }
+            },
+            "required": [
+              "type",
+              "card"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "card.delete"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "type",
+              "targetId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "card.focus"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "type",
+              "targetId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "card.highlight"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "itemId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "durationMs": {
+                "type": "integer",
+                "minimum": 150,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "type",
+              "targetId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "card.update"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "displayProps": {
+                "type": "object"
+              },
+              "variant": {
+                "enum": [
+                  "minimal",
+                  "standard",
+                  "expanded"
+                ]
+              },
+              "sourceData": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "targetId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "canvas.fit"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "canvas.restore"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "canvas.switch"
+              },
+              "canvasId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "type",
+              "canvasId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "canvas.create"
+              },
+              "canvasId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "type",
+              "canvasId",
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "ambient.setPreset"
+              },
+              "preset": {
+                "enum": [
+                  "grainient",
+                  "clouds",
+                  "clouds2"
+                ]
+              },
+              "theme": {
+                "enum": [
+                  "auto",
+                  "light",
+                  "dark"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "preset"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "subtitle.show"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "durationMs": {
+                "type": "integer",
+                "minimum": 300,
+                "maximum": 12000
+              },
+              "priority": {
+                "enum": [
+                  "normal",
+                  "reminder"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "subtitle.hide"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 12
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "canvasId",
+    "actions"
+  ],
+  "additionalProperties": false
+}
