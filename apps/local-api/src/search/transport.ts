@@ -1,8 +1,8 @@
-import { lookup } from "node:dns/promises";
 import { request } from "node:https";
 import { isIP } from "node:net";
 import { SearchError } from "./errors.js";
 import { blockedUrl, isPublicAddress, publicHttpsUrl } from "./policy.js";
+import { resolvePublicAddresses } from "./publicDns.js";
 
 export interface HttpsReply {
   status: number;
@@ -35,6 +35,7 @@ export async function requestPublicHttps(raw: string, options: {
   headers?: Record<string, string>;
   body?: string;
   acceptContentType: (type: string) => boolean;
+  publicDnsFallback?: boolean;
 }): Promise<HttpsReply> {
   const { signal, maxBytes } = options;
   if (signal.aborted) throw abortError(signal);
@@ -42,7 +43,7 @@ export async function requestPublicHttps(raw: string, options: {
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
   const literalFamily = isIP(hostname);
   const addresses = literalFamily ? [{ address: hostname, family: literalFamily }]
-    : await abortable(lookup(hostname, { all: true, verbatim: true }), signal);
+    : await abortable(resolvePublicAddresses(hostname, signal, options.publicDnsFallback === true), signal);
   if (signal.aborted) throw abortError(signal);
   if (!addresses.length || addresses.some(({ address, family }) => !isPublicAddress(address) || isIP(address) !== family)) throw blockedUrl();
   const pinned = addresses.find(a => a.family === 4) ?? addresses[0];

@@ -5,6 +5,7 @@ import { abortError, requestPublicHttps } from "./transport.js";
 import { callExaMcp, parseMcpResults } from "./upstream/exa.js";
 import type { CredentialStore } from "../credentials.js";
 import { callStepSearch, STEPSEARCH_PROVIDER, untilAborted } from "./stepsearch.js";
+import { extractArticle } from "./article.js";
 
 export const SEARCH_TOOL_NAMES = Object.freeze(["web_search", "fetch_content"] as const);
 export const SEARCH_PROVIDER = "pi-web-access/exa-mcp-keyless";
@@ -26,9 +27,11 @@ export interface SearchConfig {
   maxTextChars: number;
   maxConcurrent: number;
   requestsPerMinute: number;
+  publicDnsFallback: boolean;
 }
 
 const ConfigSchema = z.strictObject({
+  publicDnsFallback: z.boolean().default(false),
   timeoutMs: z.number().int().min(1).max(30_000).default(20_000),
   fetchTimeoutMs: z.number().int().min(1).max(30_000).default(12_000),
   maxResults: z.number().int().min(1).max(10).default(5),
@@ -80,10 +83,11 @@ export interface FetchEvidence {
   url: string;
   text: string;
   contentType: string;
-  format: "raw-text";
+  format: "raw-text" | "extracted-text";
+  title?: string;
   fetchedAt: string;
   provider: "vivic-bounded-https";
-  readFullPage: false;
+  readFullPage: boolean;
   truncated: boolean;
   trust: "untrusted-web-data";
 }
@@ -133,17 +137,18 @@ export function createSearchClient(options: {
           if (credential) return await callStepSearch({ apiKey: credential.apiKey, query: parsed.data,
             maxResults: config.maxResults, maxBytes: config.maxResponseBytes, signal,
             fetchImpl: options.fetchImpl, assertCurrent });
-          const text = await callExaMcp(parsed.data, config.maxResults, signal, config.maxResponseBytes);
+          const text = await callExaMcp(parsed.data, config.maxResults, signal, config.maxResponseBytes, config.publicDnsFallback);
           return normalizeSearchResults(text, config.maxResults, new Date().toISOString());
         });
       } finally { assertCurrent(); }
     },
-    async fetchContent(raw: string, parent?: AbortSignal): Promise<FetchEvidence> {
+    async fetchContent(raw: string, parent?: AbortSignal, article = false): Promise<FetchEvidence> {
       const first = publicHttpsUrl(raw);
       return run(config.fetchTimeoutMs, parent, async signal => {
         let current = first;
         for (let hop = 0; hop <= 3; hop++) {
           const reply = await requestPublicHttps(current.href, {
+            publicDnsFallback: config.publicDnsFallback,
             signal, maxBytes: config.maxResponseBytes,
             headers: { Accept: "text/plain, text/markdown, text/html, application/xhtml+xml" },
             acceptContentType: type => ["text/plain", "text/markdown", "text/html", "application/xhtml+xml"].includes(type),
@@ -155,11 +160,13 @@ export function createSearchClient(options: {
             continue;
           }
           if (reply.status < 200 || reply.status >= 300) throw new SearchError("search-unavailable", "当前网页不可读取。", 502);
-          const text = reply.body.toString("utf8");
+          const decoded = new TextDecoder("utf-8", { fatal: true }).decode(reply.body);
+          const extracted = article ? extractArticle(decoded, current.href, reply.contentType) : null;
+          const text = extracted?.text ?? decoded;
           return {
             url: current.href, text: text.slice(0, config.maxTextChars),
-            contentType: reply.contentType, format: "raw-text", fetchedAt: new Date().toISOString(),
-            provider: "vivic-bounded-https", readFullPage: false,
+            contentType: reply.contentType, format: article ? "extracted-text" : "raw-text", ...(extracted ? { title: extracted.title } : {}), fetchedAt: new Date().toISOString(),
+            provider: "vivic-bounded-https", readFullPage: article && text.length <= config.maxTextChars,
             truncated: text.length > config.maxTextChars, trust: "untrusted-web-data",
           };
         }

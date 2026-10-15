@@ -24,7 +24,7 @@ interface ExaMcpRpcResponse {
 const invalidResponse = () => new SearchError("search-invalid-response", "搜索源未返回有效的来源列表。", 502);
 const rateLimited = () => new SearchError("search-rate-limited", "搜索源免费额度暂时受限，请稍后重试。", 429);
 
-export async function callExaMcp(query: string, numResults: number, signal: AbortSignal, maxBytes: number): Promise<string> {
+export async function callExaMcp(query: string, numResults: number, signal: AbortSignal, maxBytes: number, publicDnsFallback = false): Promise<string> {
   const toolName = EXA_MCP_BASIC_TOOL;
   const args = { query, numResults };
   let response: HttpsReply;
@@ -41,7 +41,7 @@ export async function callExaMcp(query: string, numResults: number, signal: Abor
       method: "tools/call",
       params: { name: toolName, arguments: args },
     }),
-    signal, maxBytes,
+    signal, maxBytes, publicDnsFallback,
     acceptContentType: type => type === "application/json" || type === "text/event-stream",
   }); } catch (error) {
     // A fixed provider endpoint failing DNS policy is service unavailability,

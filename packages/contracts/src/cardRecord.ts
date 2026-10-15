@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ReminderConditionSchema, ReminderScheduleSchema, TimeZoneSchema } from "./reminderSchedule";
 
 export const CardVariantSchema = z.enum(["minimal", "standard", "expanded"]);
 
@@ -43,7 +44,13 @@ export const CountdownSourceDataSchema = z.strictObject({
   /** Kept off the minimal card; used by control and the due-time announcement. */
   reminderText: z.string().min(1).max(160).optional(),
   notifiedAt: z.iso.datetime().nullable().optional(),
-});
+  schedule: ReminderScheduleSchema.nullable().optional(),
+  condition: ReminderConditionSchema.nullable().optional(),
+  conditionMetAt: z.iso.datetime().nullable().optional(),
+  lastDeliveredTargetAt: z.iso.datetime().nullable().optional(),
+  lastFiredAt: z.iso.datetime().nullable().optional(),
+  timeZone: TimeZoneSchema.optional(),
+}).refine(value => !(value.schedule && value.condition), "重复计划与完成条件不能同时存在。");
 
 export const CountdownCardSchema = z.strictObject({
   ...CommonShape,

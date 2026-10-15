@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ActionEnvelopeSchema } from "@vivic/contracts";
 import { SPEECH_VOICE_IDS } from "./voices.js";
 import { ImageAttachmentsSchema } from "./images.js";
+import { TimeZoneSchema } from "@vivic/contracts";
 
 /** Compact canvas context the control page sends with each intent request. */
 export const CanvasContextSchema = z.strictObject({
@@ -9,6 +10,7 @@ export const CanvasContextSchema = z.strictObject({
   stage: z.enum(["STANDBY", "AWAKENING", "WORKSPACE"]),
   viewport: z.strictObject({ x: z.number(), y: z.number(), zoom: z.number() }),
   focusHistory: z.array(z.string().max(128)).max(20),
+  timeZone: TimeZoneSchema.optional(),
   cards: z
     .array(
       z.strictObject({
