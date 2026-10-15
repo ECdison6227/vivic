@@ -86,3 +86,17 @@ Vite 8.3.4、TypeScript 6.0.3、Vitest 5.0.4、@playwright/test 1.64.0、oxlint 
 - **当前未使用**：Vanta Clouds/Clouds2（RESEARCH）、Liquid Ether（spec 禁用）、ELK.js。Recharts、Sherpaw 现已实际安装使用，不能再沿用 Phase 0 的未安装清单。Laya 当前组合 **NO_GO**；Winnow **BLOCKED**，未下载/运行，不作为已交付运行依赖。
 - `Vivic_Kimi_Handoff_v0.6/reference/atmosphere_original.html` 为用户上传的视觉参考文件，仅用作运动/配色基准，未嵌入产物。
 - 截图对比件 `evidence/phase0/reference/` 为该参考的浏览器渲染记录，非产物 UI。
+
+## 本轮本地决策、日程与正文解析
+
+| 包 / 模型 | 固定版本或来源 | 许可 | 用途 |
+| --- | --- | --- | --- |
+| `@js-temporal/polyfill` | 0.5.1 | ISC | 时区、日期及夏令时计算 |
+| `@mozilla/readability` | 0.6.0 | Apache-2.0 | 已抓取 HTML 的正文提取 |
+| `jsdom` | 30.1.2 | MIT | 惰性 DOM 解析，不执行脚本/加载资源 |
+| Kev 源码与 Kev-0.8B 适配器 | [固定 manifest](scripts/decision-model/manifest.json)、[上游许可](scripts/decision-model/LICENSE.kev) | Apache-2.0 | 可选的固定选项评分器 |
+| Qwen3.5-0.8B-Base | `dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68` | Apache-2.0 | Kev 固定基础权重，按需下载，不随源码提交 |
+| MLX / mlx-lm | 0.32.4 / 0.31.3 | MIT | Apple Silicon 本地推理 |
+| PyTorch / Transformers / PEFT | 2.8.0 / 5.19.0 / 0.21.2 | BSD-3-Clause / Apache-2.0 / Apache-2.0 | 固定离线加载及张量接口；完整环境锁见 `requirements.lock` |
+
+默认唤醒词合成验收复用上述「固定短反馈」中同一套 Kokoro 固定权重与许可，仅生成本机 TEST 文件，不随产品新增用户音频。Winnow 只核对公开元数据，未下载/分发其权重。
