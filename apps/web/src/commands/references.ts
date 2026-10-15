@@ -10,10 +10,10 @@ import { zhToNumber } from "./zhNumber";
  */
 
 const TYPE_KEYWORDS: Array<[RegExp, CardRecord["type"]]> = [
-  [/倒计时|计时/, "CountdownCard"],
+  [/倒计时|计时|提醒/, "CountdownCard"],
   [/待办|任务|todo/i, "TodoCard"],
   [/天气/, "WeatherCard"],
-  [/便签|笔记|note/i, "NoteCard"],
+  [/便笺|便签|笔记|note/i, "NoteCard"],
   [/搜索|资料|结果|search/i, "SearchResultCard"],
   [/表格|table/i, "TableCard"],
   [/图表|chart/i, "ChartCard"],

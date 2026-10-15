@@ -32,10 +32,11 @@ export interface IntentResult {
   envelope?: ActionEnvelope;
   message?: string;
   suggestions?: string[];
-  usedProvider?: "rules" | "stepfun" | "gpt" | "rules-offline" | "search";
+  usedProvider?: "rules" | "stepfun" | "gpt" | "rules-offline" | "search" | "decision";
 }
 
 export interface CanvasContextPayload {
+  timeZone?: string;
   canvasId: string;
   stage: VivicState["stage"];
   viewport: VivicState["viewport"];
@@ -56,8 +57,10 @@ const secretFields = new Set(["apiKey", "token", "secret"]);
 const summarizeSourceData = (
   record: CardState["record"],
 ): Record<string, unknown> => {
+  if (record.type === "CountdownCard") return { ...record.sourceData };
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record.sourceData)) {
+    if (key === "articleText" && typeof value === "string") { out[key] = `[${value.length} chars, retained on the source card]`; continue; }
     if (secretFields.has(key.toLowerCase())) continue;
     if (["string", "number", "boolean"].includes(typeof value) || value === null) {
       out[key] = value;
@@ -75,6 +78,7 @@ export const buildCanvasContext = (
   canvasId: string,
 ): CanvasContextPayload => ({
   canvasId,
+  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   stage: state.stage,
   viewport: state.viewport,
   focusHistory: state.focusHistory,

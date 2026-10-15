@@ -19,6 +19,11 @@ import { summarizeEvidence } from "./searchSummary.js";
 import { continueWeatherInput } from "../data/weatherInput.js";
 import { startsNewInstruction } from "@vivic/contracts";
 import { isMixedInstruction, parseNumericIntent } from "../data/numeric.js";
+import { scheduledReminderIntent } from "./scheduledReminders.js";
+import { articleEnvelope, articleRequest } from "./article.js";
+import type { FetchEvidence } from "../search/client.js";
+import { localDecisionIntent } from "../decision/intent.js";
+import type { DecisionManager } from "../decision/manager.js";
 
 export interface IntentRequest { text: string; canvasContext: CanvasContext; attachments?: Attachment[]; continuation?: { utterance: string; question: string } }
 export interface IntentResult {
@@ -26,13 +31,15 @@ export interface IntentResult {
   envelope?: z.infer<typeof ActionEnvelopeSchema>;
   message?: string;
   suggestions?: string[];
-  usedProvider?: "rules" | "stepfun" | "gpt" | "rules-offline" | "search";
+  usedProvider?: "rules" | "stepfun" | "gpt" | "rules-offline" | "search" | "decision";
 }
 export interface PipelineDeps {
+  decision?: Pick<DecisionManager, "score">;
   credentials: CredentialStore;
   stepfun: StepfunDeps;
   onPlannerCall?: (attempt: number) => void;
-  search?: { webSearch: (query: string, signal?: AbortSignal) => Promise<SearchEvidence[]> };
+  search?: { webSearch: (query: string, signal?: AbortSignal) => Promise<SearchEvidence[]>;
+    fetchContent?: (url: string, signal?: AbortSignal, article?: boolean) => Promise<FetchEvidence> };
   planner?: { provider: "gpt"; connected: boolean; generate: (messages: ChatMessage[], signal?: AbortSignal) => Promise<StepfunResult<unknown>>; isCurrent: () => boolean; };
   isSessionCurrent?: () => boolean;
   data?: { handleDataIntent: (text: string, context: CanvasContext, signal?: AbortSignal) => Promise<IntentResult | null> };
@@ -63,6 +70,13 @@ export const runIntent = async (
     budget.signal.throwIfAborted();
     const hasImages = Boolean(req.attachments?.length);
     const continuation = req.continuation && !startsNewInstruction(req.text) ? req.continuation : undefined;
+    const scheduled = !hasImages && !continuation ? scheduledReminderIntent(req.text, req.canvasContext) : null;
+    if (scheduled) {
+      if (!scheduled.actions) return { kind: "clarify", message: scheduled.message, usedProvider: "rules" };
+      const envelope = assembleEnvelope(scheduled.actions, req.canvasContext.canvasId, scheduled.message);
+      if (envelope) return { kind: "envelope", envelope, usedProvider: "rules" };
+      return { kind: "clarify", message: "计划提醒未通过校验，请明确日期、时区或条件。", usedProvider: "rules" };
+    }
     const ruleHit = hasImages || continuation ? null : matchRules(req.text, req.canvasContext);
     if (ruleHit) {
       const envelope = assembleEnvelope(ruleHit.actions, req.canvasContext.canvasId, ruleHit.spokenText);
@@ -81,6 +95,15 @@ export const runIntent = async (
       if (dataResult) return dataResult;
     }
     const query = hasImages || continuation ? null : searchQuery(req.text);
+    const pageUrl = !hasImages && !continuation ? articleRequest(req.text) : null;
+    if (pageUrl && deps.search?.fetchContent) {
+      try {
+        const article = await budget.run(() => deps.search!.fetchContent!(pageUrl, budget.signal, true));
+        budget.signal.throwIfAborted();
+        if (deps.isSessionCurrent && !deps.isSessionCurrent()) return { kind: "error", message: "连接已变更，旧网页结果已丢弃。" };
+        return { kind: "envelope", envelope: articleEnvelope(req.canvasContext, article), usedProvider: "search" };
+      } catch (error) { budget.signal.throwIfAborted(); return { kind: "error", message: publicSearchError(error).message, usedProvider: "search" }; }
+    }
     if (query && deps.search) {
       usedProvider = "search";
       try {
@@ -102,6 +125,11 @@ export const runIntent = async (
         budget.signal.throwIfAborted();
         return { kind: "error", message: `联网查询暂不可用：${publicSearchError(error).message}`.slice(0, 400), usedProvider };
       }
+    }
+    if (deps.decision && !hasImages && !continuation) {
+      const result = await localDecisionIntent(req.text, req.canvasContext, deps.decision, budget.signal);
+      budget.signal.throwIfAborted();
+      if (result) return result;
     }
     const credential = deps.credentials.getSecret();
     if (deps.planner ? !deps.planner.connected : !credential) return { kind: "unknown", message: deps.planner ? "GPT 未连接；本地文字指令仍可使用。请先连接 GPT 或选择 StepFun。" : OFFLINE_MESSAGE, usedProvider: "rules-offline" };

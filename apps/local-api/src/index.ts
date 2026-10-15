@@ -20,7 +20,7 @@ if (fs.existsSync(dist)) {
   app.use("/*", serveStatic({ root: dist }));
 }
 
-serve(
+const server = serve(
   { fetch: app.fetch, hostname: config.host, port: config.port },
   (info) => {
     console.log(`[vivic-local-api] listening on http://${info.address}:${info.port} (loopback only)`);
@@ -29,3 +29,8 @@ serve(
     }
   },
 );
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
+  app.dispose(); server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 1000).unref();
+});
+process.once("exit", () => { app.dispose(); });

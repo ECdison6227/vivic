@@ -1,3 +1,4 @@
+import { notifyReminder } from "@/reminders/notifications";
 import { ActionEnvelopeSchema, type ActionEnvelope } from "@/contracts";
 import { newId } from "@/lib/id";
 import {
@@ -31,7 +32,8 @@ import {
 } from "./owner";
 import { parseSyncMessage, DisplayPreferencesSchema, DEFAULT_DISPLAY_PREFERENCES,
   type DisplayPreferences, type CanvasInteraction, type SyncMessage } from "./protocol";
-import { isDue, reminderText, sameDelivery, ReminderInboxSchema, type ReminderNotice, type ReminderSummary } from "@/reminders/reminders";
+import { isDue, reminderText, sameDelivery, conditionSatisfied, deliveredNoticeCurrent, ReminderInboxSchema, type ReminderNotice, type ReminderSummary } from "@/reminders/reminders";
+import { nextReminderOccurrence, type CountdownCard } from "@vivic/contracts";
 
 /**
  * CONTROL_OWNER host: the sole writer. Dispatches validated ActionEnvelopes
@@ -737,10 +739,36 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     }
   }
 
+  const updateReminder = async (item: ReminderSummary, patch: Partial<CountdownCard["sourceData"]>, highlight = false) => {
+    if (!writable()) return;
+    if (item.canvasId === activeCanvasId) {
+      dispatch({ schemaVersion: "0.6", requestId: newId("reminded"), canvasId: item.canvasId,
+        actions: [{ type: "card.update", targetId: item.card.id, sourceData: patch },
+          ...(highlight ? [{ type: "card.highlight" as const, targetId: item.card.id, durationMs: 8000 }] : [])] });
+      await saveActiveNow();
+    } else {
+      const record = records.get(item.canvasId), card = record?.cardsById[item.card.id];
+      if (!record || card?.type !== "CountdownCard") return;
+      const updated: CanvasRecord = { ...record, version: record.version + 1, updatedAt: new Date(now()).toISOString(),
+        cardsById: { ...record.cardsById, [card.id]: { ...card, sourceData: { ...card.sourceData, ...patch } } } };
+      records.set(item.canvasId, updated);
+      await queueWrite(async () => { if (!canPersist()) return; await deps.db.putCanvas(updated); persistedVersions.set(updated.id, updated.version); });
+      if (records.get(item.canvasId) === updated) postSnapshot(item.canvasId);
+    }
+  };
+
   const runReminderCheck = async () => {
     try {
       await persistence;
       if (!writable()) return;
+      for (const item of getReminders()) {
+        const record = records.get(item.canvasId);
+        const cards = item.canvasId === activeCanvasId ? store.getState().cards.filter(c => !c.exitingRequestId).map(c => c.record)
+          : record ? record.cardOrder.map(id => record.cardsById[id]!) : [];
+        if (conditionSatisfied(item.card, cards)) await updateReminder(item, {
+          conditionMetAt: new Date(now()).toISOString(), targetAt: new Date(now() + item.card.sourceData.condition!.delaySeconds * 1000).toISOString(), notifiedAt: null,
+        });
+      }
       const due = getReminders().filter(item => isDue(item.card, now()));
       if (!due.length) return;
       const fresh = due.filter(item => !reminderNotices.some(n => sameDelivery(n, item))).map(item => ({
@@ -761,36 +789,18 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
         // The user may delete, pause or reschedule while persistence awaits.
         const current = getReminders().find(r => r.canvasId === item.canvasId && r.card.id === item.card.id);
         if (!current || current.card.sourceData.targetAt !== item.card.sourceData.targetAt || !isDue(current.card, now())) continue;
-        const notifiedAt = new Date(now()).toISOString();
-        if (item.canvasId === activeCanvasId) {
-          dispatch({ schemaVersion: "0.6", requestId: newId("reminded"), canvasId: item.canvasId,
-            actions: [{ type: "card.update", targetId: item.card.id, sourceData: { notifiedAt } },
-              { type: "card.highlight", targetId: item.card.id, durationMs: 8000 }],
-          });
-          await saveActiveNow();
-        } else {
-          const record = records.get(item.canvasId);
-          const card = record?.cardsById[item.card.id];
-          if (!record || !card || card.type !== "CountdownCard") continue;
-          const updated: CanvasRecord = { ...record, version: record.version + 1,
-            updatedAt: notifiedAt, cardsById: { ...record.cardsById,
-              [card.id]: { ...card, sourceData: { ...card.sourceData, notifiedAt } } },
-          };
-          records.set(item.canvasId, updated);
-          await queueWrite(async () => {
-            if (!canPersist()) return;
-            await deps.db.putCanvas(updated); persistedVersions.set(updated.id, updated.version);
-          });
-          if (records.get(item.canvasId) === updated) postSnapshot(item.canvasId);
-        }
+        const firedAt = new Date(now()).toISOString(), schedule = current.card.sourceData.schedule;
+        await updateReminder(current, { lastFiredAt: firedAt, lastDeliveredTargetAt: current.card.sourceData.targetAt,
+          ...(schedule ? { targetAt: nextReminderOccurrence(schedule, current.card.sourceData.targetAt, now()), notifiedAt: null } : { notifiedAt: firedAt }) }, true);
       }
       const reportable = fresh.filter(notice => getReminders().some(item =>
-        sameDelivery(notice, item) && Boolean(item.card.sourceData.notifiedAt)));
+        notice.canvasId === item.canvasId && notice.cardId === item.card.id && deliveredNoticeCurrent(notice, item.card)));
       const stale = new Set(fresh.filter(n => !reportable.includes(n)).map(n => n.id));
       if (stale.size) {
         reminderNotices = reminderNotices.filter(n => !stale.has(n.id));
         await deps.db.setMeta("reminderInbox", JSON.stringify(reminderNotices));
       }
+      if (writable()) reportable.forEach(notifyReminder);
       if (reportable.length && activeCanvasId && owner.mode() === "owner") {
         const text = reportable.length === 1 ? `提醒：${reportable[0]!.text}`
           : `${reportable.length}项提醒到时间了：${reportable.map(n => n.text).join("；")}`;

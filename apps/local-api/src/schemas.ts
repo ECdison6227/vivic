@@ -1,3 +1,4 @@
+import { CloneVoiceIdSchema } from "./voiceClone.js";
 import { z } from "zod";
 import { ActionEnvelopeSchema } from "@vivic/contracts";
 import { SPEECH_VOICE_IDS } from "./voices.js";
@@ -47,6 +48,7 @@ export const SpeechRequestSchema = z.strictObject({
   text: z.string().max(200)
     .regex(/^[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]*$/u, "只接受可见短句").trim().min(1),
   voice: z.enum(SPEECH_VOICE_IDS).optional(),
+  clonedVoiceId: CloneVoiceIdSchema.optional(),
   speed: z.number().min(0.5).max(2).optional(),
   timestamps: z.boolean().optional(),
 });
@@ -56,7 +58,7 @@ export const IntentResponseSchema = z.strictObject({
   envelope: ActionEnvelopeSchema.optional(),
   message: z.string().max(400).optional(),
   suggestions: z.array(z.string().min(1).max(100)).max(5).optional(),
-  usedProvider: z.enum(["rules", "stepfun", "gpt", "rules-offline", "search"]).optional(),
+  usedProvider: z.enum(["rules", "stepfun", "gpt", "rules-offline", "search", "decision"]).optional(),
 });
 
 export type IntentResponse = z.infer<typeof IntentResponseSchema>;

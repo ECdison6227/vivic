@@ -1,3 +1,5 @@
+import { VoiceCloneSettings } from "./VoiceCloneSettings";
+import { AudioOutputSettings } from "./AudioOutputSettings";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Select } from "radix-ui";
 import { Check, ChevronDown } from "lucide-react";
@@ -216,6 +218,8 @@ export const AiSection = ({ onBackendChange, disabled = false }: AiSectionProps)
       </div>
       <p className="mt-2 text-xs text-neutral-500">语音与决策模型独立。没有语音服务时可直接使用文字；本地识别需先下载下方模型。</p>
 
+      {voiceConfig.tts === "stepfun" && <VoiceCloneSettings disabled={disabled || busy || !stepfun?.connected} />}
+      <AudioOutputSettings disabled={disabled || busy} />
       <label className="mt-3 flex items-center gap-2 text-xs text-neutral-700">
         <Input
           type="checkbox"
@@ -240,7 +244,7 @@ export const AiSection = ({ onBackendChange, disabled = false }: AiSectionProps)
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Select.Root
               value={speech.preferences.voice}
-              onValueChange={(voice) => setSpeechPreferences({ voice: voice as SpeechVoiceId })}
+              onValueChange={(voice) => setSpeechPreferences({ voice: voice as SpeechVoiceId, clonedVoiceId: "" })}
             >
               <Select.Trigger asChild>
                 <Button id="vivic-tts-voice" variant="outline" className="min-w-40 flex-1 justify-between" data-vivic-tts-voice>

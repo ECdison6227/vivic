@@ -15,7 +15,8 @@ export const SPEECH_VOICE_IDS = SPEECH_VOICES.map((voice) => voice.id);
 export const DEFAULT_SPEECH_VOICE: SpeechVoiceId = "cixingnansheng";
 
 export interface SpeechOptions {
-  voice?: SpeechVoiceId;
+  /** Caller validates official IDs or current-session clone membership. */
+  voice?: string;
   speed?: number;
   timestamps?: boolean;
 }

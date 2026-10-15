@@ -135,7 +135,8 @@ test("model catalog success with Plan 403 shows the reason instead of a connecte
     await expect(page.locator("[data-vivic-ai-note]")).toContainText("No active Plan subscription");
     await expect(page.locator("[data-vivic-ai-note]")).toContainText("HTTP 403");
     await expect(page.locator("[data-vivic-ai-badge]")).toHaveText("未连接");
-    await expect(page.locator("[data-vivic-tts-toggle]")).toBeDisabled();
+    await expect(page.locator("[data-vivic-tts-toggle]")).not.toBeChecked();
+    await expect(page.locator("[data-vivic-tts-preview]")).toBeDisabled();
     await expect(page.locator("[data-vivic-ai-key-input]")).toHaveValue("");
     expect(await page.content()).not.toContain(SECRET_KEY);
   } finally {
@@ -172,7 +173,7 @@ test("backend-first planning: rules miss -> stubbed LLM envelope reaches the can
       actions: [{ type: "card.focus", targetId: cardId }],
       spokenText: "已聚焦它",
     };
-    await sendCommand(page, "聚焦那个待办");
+    await sendCommand(page, "我想仔细研究这项任务的细节，请将它居中显示");
     await page.waitForTimeout(600);
     const focus = await page.evaluate(
       () =>

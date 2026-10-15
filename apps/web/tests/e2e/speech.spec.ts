@@ -39,12 +39,12 @@ test("TTS is opt-in and an unavailable Plan voice reports failure without blocki
   await connected(page);
   await expect(page.locator('[data-vivic-tts-toggle]')).not.toBeChecked();
   await sendCommand(page, "显示全部");
-  await expect(page.locator('[data-vivic-command-feedback]')).toHaveText("已显示全部");
+  await expect(page.locator('[data-vivic-command-feedback]')).toHaveText("已显示全部卡片");
   expect(calls).toBe(0);
   await page.locator('[data-vivic-tts-toggle]').check();
   await sendCommand(page, "显示全部");
   await expect(page.locator('[data-vivic-tts-note]')).toContainText("HTTP 403");
-  await expect(page.locator('[data-vivic-command-feedback]')).toHaveText("已显示全部");
+  await expect(page.locator('[data-vivic-command-feedback]')).toHaveText("已显示全部卡片");
   expect(calls).toBe(1);
 });
 

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { buildCanvasContext, postIntent } from "@/ai/api";
 import { cancelSpeech, speakText, subscribeSpeech, getSpeechSnapshot, speakShortFeedback, cancelShortFeedback } from "@/ai/speech";
 import { speechDisplayFrame, type SpeechRange } from "@/ai/speechTelemetry";
-import { clarifiedCardAction, parseCommand, type CommandResult } from "@/commands/parse";
+import { LocalDecisionSettings } from "./LocalDecisionSettings";
+import { clarifiedCardAction, fastLocalCommand, parseCommand, type CommandResult } from "@/commands/parse";
 import type { ResolvedCard } from "@/commands/references";
 import { applyUrlTheme } from "@/lib/urlTheme";
 import { newId } from "@/lib/id";
@@ -15,6 +16,7 @@ import { CommandSection, type ClarifyState } from "./CommandSection";
 import { DataActions } from "./DataActions";
 import { RemindersSection } from "./RemindersSection";
 import type { ReminderNotice } from "@/reminders/reminders";
+import { deliveredNoticeCurrent } from "@/reminders/reminders";
 import { cancelVoiceInput, getVoiceInputSnapshot, isVoiceInputBusy, subscribeVoiceInput } from "@/ai/voiceInput";
 import { LocalSpeechSettings } from "./LocalSpeechSettings";
 import { CanvasSettings } from "./CanvasSettings";
@@ -161,7 +163,7 @@ export const ControlApp = () => {
           // If the timer was removed/rescheduled after firing, don't read a
           // now-obsolete queued announcement when another sound finishes.
           const current = host.getSnapshot().reminders.find(r => r.canvasId === notice.canvasId && r.card.id === notice.cardId);
-          if (!current || current.card.sourceData.targetAt !== notice.targetAt || !current.card.sourceData.notifiedAt || current.card.sourceData.pausedAt) continue;
+          if (!current || !deliveredNoticeCurrent(notice, current.card)) continue;
           await speakText(`提醒：${notice.text}`.slice(0, 200), { requestId: notice.id });
         }
       } finally { announcing.current = false; }
@@ -170,7 +172,7 @@ export const ControlApp = () => {
       for (const notice of host.getSnapshot().reminderNotices) {
         if (seen.has(notice.id)) continue;
         const timer = host.getSnapshot().reminders.find(r => r.canvasId === notice.canvasId && r.card.id === notice.cardId);
-        if (!timer?.card.sourceData.notifiedAt || timer.card.sourceData.pausedAt || timer.card.sourceData.targetAt !== notice.targetAt) continue;
+        if (!timer || !deliveredNoticeCurrent(notice, timer.card)) continue;
         seen.add(notice.id);
         reminderQueue.current.push(notice);
       }
@@ -267,7 +269,7 @@ export const ControlApp = () => {
         spokenText: result.spokenText,
         actions: result.actions,
       });
-      const message = res.ok ? result.description : `指令未执行（${res.error}）`;
+      const message = res.ok ? result.spokenText ?? result.description : `指令未执行（${res.error}）`;
       setFeedback(message);
       if (!res.ok) publishFeedback(h, message);
       if (res.ok && result.spokenText) void speakText(result.spokenText, { requestId: newId("speech") });
@@ -302,6 +304,10 @@ export const ControlApp = () => {
             canvasId: activeCanvasId,
           }),
         );
+      if (!attachments?.length && !continuation) {
+        const exact = fastLocalCommand(trimmed, { state: canvasStore.getState(), canvasId: activeCanvasId });
+        if (exact) { applyResult(host, exact); return; }
+      }
       // 撤销 is window-local undo-stack semantics: handle it here, never
       // round-trip to the decision API.
       if (!attachments?.length && /^(撤销|撤销删除)$/.test(trimmed)) {
@@ -558,6 +564,7 @@ const ControlShell = (props: ShellProps) => {
           readonly={readonly}
         />
         <CanvasSettings host={props.host} disabled={readonly || !snap.ready} />
+        <LocalDecisionSettings disabled={readonly || !snap.ready} />
 
         <RemindersSection host={props.host} readonly={readonly} />
 

@@ -35,6 +35,7 @@ export interface LocalApiConfig {
   speechTimeoutMs?: number;
   asrTimeoutMs?: number;
   searchEnabled?: boolean;
+  publicDnsFallback?: boolean;
   bodyLimitBytes: number;
 }
 
@@ -69,6 +70,7 @@ export const loadConfig = (
     fs.writeFileSync(target, existing + line, { mode: 0o600 });
   }
   return {
+    publicDnsFallback: env.VIVIC_PUBLIC_DNS_FALLBACK !== "0",
     port: Number(env.PORT ?? 8787),
     host: "127.0.0.1",
     token,

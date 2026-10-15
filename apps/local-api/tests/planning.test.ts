@@ -124,12 +124,19 @@ describe("compact reminder planner", () => {
       expect(call).toHaveBeenCalledTimes(2);
     }
   });
-  it.each(["如果下雨，十分钟后提醒我收衣服", "每隔五分钟提醒我喝水"])("clarifies the entire conditional/repeating request: %s", async (text) => {
+  it.each(["如果下雨，十分钟后提醒我收衣服"])("clarifies unsupported external conditions: %s", async (text) => {
     const { deps, call } = setup(() => chatOk({ clarify: "需要确认提醒条件或重复频率，可以改为一次提醒吗？" }));
     const result = await runIntent({ text, canvasContext: emptyContext() }, deps);
     expect(result.kind).toBe("clarify");
     expect(result.envelope).toBeUndefined();
     expect(call).toHaveBeenCalledTimes(1);
+  });
+  it("creates interval reminders without invoking a model", async () => {
+    const { deps, call } = setup(() => { throw new Error("Model must not run"); });
+    const result = await runIntent({ text: "每隔五分钟提醒我喝水", canvasContext: emptyContext() }, deps);
+    expect(created(result)[0]?.sourceData.schedule).toEqual({ kind: "interval", everySeconds: 300 });
+    expect(result.usedProvider).toBe("rules");
+    expect(call).not.toHaveBeenCalled();
   });
   it("does not accept an unsupported conditional plan despite valid JSON", async () => {
     const { deps } = setup(() => chatOk({ reminders: [{ afterSeconds: 600, text: "收衣服" }] }));

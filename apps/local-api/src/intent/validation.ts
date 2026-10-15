@@ -17,6 +17,8 @@ export const actionExecutionIssue = (actions: Action[], ctx: CanvasContext): str
       if (!CREATABLE.has(card.type)) return "尚未接入真实数据的卡片不能创建（Weather/Table/Chart/Search）";
       if (usedIds.has(card.id)) return "新卡片 id 重复";
       if (card.sources.length) return "没有联网数据源，不能虚构来源";
+      if (card.type === "CountdownCard" && (card.sourceData.schedule || card.sourceData.condition || card.sourceData.conditionMetAt
+        || card.sourceData.lastFiredAt || card.sourceData.lastDeliveredTargetAt)) return "计划提醒必须由明确规则适配器创建，通知状态由调度器管理";
       usedIds.add(card.id);
       targets.set(card.id, { type: card.type, displayProps: card.displayProps, sourceDataSummary: card.sourceData });
     } else if ("targetId" in action) {
@@ -46,6 +48,10 @@ export const actionExecutionIssue = (actions: Action[], ctx: CanvasContext): str
         const display = { ...target.displayProps, ...action.displayProps };
         const source = { ...target.sourceDataSummary, ...action.sourceData };
         if (target.type === "CountdownCard") {
+          if (action.sourceData && ["schedule", "condition", "conditionMetAt", "lastFiredAt", "lastDeliveredTargetAt"].some(key =>
+            key in action.sourceData! && JSON.stringify(action.sourceData![key]) !== JSON.stringify(target.sourceDataSummary[key])))
+            return "计划/通知状态不能由模型改写，请用控制端修改计划提醒";
+          if (target.sourceDataSummary.schedule && action.sourceData && "targetAt" in action.sourceData) return "重复提醒请通过控制端调整或继续，不能猜测下次日期";
           if (action.sourceData && "notifiedAt" in action.sourceData && !("targetAt" in action.sourceData)) return "提醒通知状态由调度器管理";
           if (Object.keys(display).length || !CountdownSourceDataSchema.safeParse(source).success) return "倒计时字段不合法";
         } else {

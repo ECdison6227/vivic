@@ -50,8 +50,14 @@ export class IndexedDbModelStorage implements ModelStorage {
       } finally { signal?.removeEventListener("abort", cancel); }
     } finally { db.close(); }
   }
-  get(id: ModelId) {
-    return this.transact("readonly", tx => request(tx.objectStore("models").get(id)) as Promise<CachedModel | undefined>);
+  async get(id: ModelId): Promise<CachedModel | undefined> {
+    const record = await this.transact("readonly", tx => request(tx.objectStore("models").get(id))) as
+      (Omit<CachedModel, "blob"> & { blob?: Blob; buffer?: ArrayBuffer; contentType?: string }) | undefined;
+    if (!record) return undefined;
+    if (record.blob instanceof Blob) return { id: record.id, sha256: record.sha256, bytes: record.bytes, blob: record.blob };
+    if (record.buffer instanceof ArrayBuffer) return { id: record.id, sha256: record.sha256, bytes: record.bytes,
+      blob: new Blob([record.buffer], { type: record.contentType ?? "application/octet-stream" }) };
+    return undefined;
   }
   begin(id: ModelId) {
     const lease = crypto.randomUUID();
@@ -60,13 +66,24 @@ export class IndexedDbModelStorage implements ModelStorage {
       return lease;
     });
   }
-  put(record: CachedModel, lease: string, signal?: AbortSignal) {
-    return this.transact("readwrite", async tx => {
+  async put(record: CachedModel, lease: string, signal?: AbortSignal) {
+    const write = (value: object) => this.transact("readwrite", async tx => {
       const current = await request(tx.objectStore("leases").get(record.id));
       checkAbort(signal);
       if (current !== lease) throw abortError();
-      await request(tx.objectStore("models").put(record));
+      await request(tx.objectStore("models").put(value));
     }, signal);
+    try { await write(record); }
+    catch (error) {
+      // WebKit can reject IDB's Blob backing-file preparation. Retry once with
+      // bytes, outside the failed transaction; the new transaction rechecks the
+      // lease so cancellation/reset can never resurrect an old download.
+      if (!(error instanceof DOMException) || !["UnknownError", "DataCloneError"].includes(error.name)) throw error;
+      checkAbort(signal);
+      const buffer = await record.blob.arrayBuffer();
+      checkAbort(signal);
+      await write({ id: record.id, sha256: record.sha256, bytes: record.bytes, buffer, contentType: record.blob.type });
+    }
   }
   delete(id?: ModelId) {
     return this.transact("readwrite", async tx => {

@@ -3,11 +3,12 @@ import { newId } from "@/lib/id";
 import type { VivicState } from "@/state/canvasStore";
 import { resolveReference, type ResolvedCard } from "./references";
 import { zhToNumber } from "./zhNumber";
+import { resumeReminderSource } from "@/reminders/reminders";
 
 export { zhToNumber };
 
 /**
- * Local rules-only command parser (no LLM; Winnow/StepFun arrive in Phase 2).
+ * Local rules-only command parser (no LLM; validated remote planning is handled separately).
  * Chinese-first. Everything it emits is a validated Action set — never DOM
  * mutation. Destructive intent with low confidence returns `clarify` instead
  * of acting (candidates get highlighted on stage; the user picks in /control).
@@ -117,6 +118,43 @@ export const parseCommand = (
   const input = rawInput.trim();
   const now = ctx.now?.() ?? Date.now();
   if (!input) return { kind: "unknown", message: "请输入指令" };
+
+  const todoUpdate = input.match(/^(?:请)?(?:把|将)?(?:第([一二两三四五六七八九十\d]+)张)?待办(?:卡片)?(?:的)?第([一二两三四五六七八九十\d]+)项(?:标记为|设为|改为)?(完成|已完成|未完成|取消完成)[。！!]?$/);
+  if (todoUpdate) {
+    const todos = ctx.state.cards.filter(c => !c.exitingRequestId && c.record.type === "TodoCard");
+    const cardIndex = todoUpdate[1] ? zhToNumber(todoUpdate[1]) : todos.length === 1 ? 1 : null;
+    const itemIndex = zhToNumber(todoUpdate[2]!);
+    const card = cardIndex ? todos[cardIndex - 1]?.record : undefined;
+    if (card?.type !== "TodoCard" || !itemIndex || !card.displayProps.items[itemIndex - 1])
+      return { kind: "unknown", message: "请明确第几张待办及有效的第几项，例如「把第2张待办第1项标记为完成」。" };
+    const done = todoUpdate[3] === "完成" || todoUpdate[3] === "已完成";
+    return { kind: "envelope", actions: withAwaken(ctx, [{ type: "card.update", targetId: card.id,
+      displayProps: { items: card.displayProps.items.map((item, index) => index === itemIndex - 1 ? { ...item, done } : item) } }]),
+      spokenText: `已将待办第${itemIndex}项标记为${done ? "完成" : "未完成"}`, description: "更新待办完成状态" };
+  }
+
+  const timerState = input.match(/^(暂停|继续|恢复)(.*(?:提醒|倒计时))[。！!]?$/);
+  if (timerState && !/然后|并且|同时|不要|[，,；;\n]/.test(input)) {
+    const reference = timerState[2]!, timerCards = ctx.state.cards.filter(card => card.record.type === "CountdownCard" && !card.exitingRequestId);
+    const name = reference.replace(/(?:的)?(?:提醒|倒计时)$/, "");
+    const named = timerCards.filter(card => card.record.type === "CountdownCard" && (card.record.sourceData.reminderText === name || card.record.metadata.aliases?.includes(name)));
+    const generic = /^(?:(?:这|那)(?:个|张)?|刚才(?:那个)?|最近|左边(?:的)?|右边(?:的)?|第[一二两三四五六七八九十\d]+(?:个|张)(?:的)?)?(?:提醒|倒计时)$/.test(reference);
+    const resolution = named.length === 1 ? { kind: "unique" as const, card: named[0]!.record }
+      : named.length || !generic ? { kind: "none" as const }
+        : resolveReference(reference, { state: { ...ctx.state, cards: timerCards }, now: ctx.now });
+    if (resolution.kind !== "unique" || resolution.card.type !== "CountdownCard")
+      return { kind: "unknown", message: "请明确一张提醒，例如「暂停喝水提醒」；不会任意修改多个提醒。" };
+    const card = resolution.card;
+    return { kind: "envelope", actions: [{ type: "card.update", targetId: card.id, sourceData: timerState[1] === "暂停"
+      ? { pausedAt: new Date(now).toISOString() } : card.sourceData.pausedAt ? resumeReminderSource(card, now) : {} }],
+      spokenText: timerState[1] === "暂停" ? "已暂停提醒" : "已继续提醒", description: "更新提醒状态" };
+  }
+
+  // A reference command cannot silently execute only the first clause.
+  if (/^(?:删除|删掉|删了|删|移除|去掉|放大|聚焦|看一看|看下|看看|focus)/i.test(input)
+    && /然后|并且|同时|顺便|接着|不要|不用|别|[，,；;\n]|再(?:删|创建|聚焦|添加|提醒|显示|恢复|放大)|并(?:删|创建|聚焦|添加|提醒)|(?:待办|倒计时|便笺|便签|卡片).*(?:和|以及|与|或者).*(?:待办|倒计时|便笺|便签|卡片)/.test(input)) {
+    return { kind: "unknown", message: "请将多个操作或否定要求拆开说明；本次未执行任何部分。" };
+  }
 
   // canvas-level views
   if (/^(显示全部|全部显示|看全部|适应画布|fit)$/i.test(input)) {
@@ -281,4 +319,12 @@ export const parseCommand = (
     message:
       "暂时只懂这些指令：倒计时 / 加待办 / 放大… / 展开便笺 / 收起便笺 / 删除… / 显示全部 / 恢复原视图 / 撤销（搜索、天气等联网能力在 Phase 2 接入）",
   };
+};
+
+/** The browser already has exact targets; don't ask an LLM to rediscover them. */
+export const fastLocalCommand = (text: string, ctx: CommandContext): CommandResult | null => {
+  const result = parseCommand(text, ctx);
+  if (result.kind === "unknown" && /^(?:请)?(?:把|将)?(?:第[一二两三四五六七八九十\d]+张)?待办.*(?:完成|未完成)|^(?:暂停|继续|恢复).*(?:提醒|倒计时)/.test(text)) return result;
+  if (result.kind === "undo" || result.kind === "clarify") return result;
+  return result.kind === "envelope" && !result.actions.some(action => action.type === "card.create") ? result : null;
 };

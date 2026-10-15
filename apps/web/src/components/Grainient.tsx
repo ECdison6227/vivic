@@ -426,6 +426,12 @@ const Grainient = ({
     let raf = 0;
     let last = 0;
     let visible = true;
+    let contextLost = false;
+    const onContextLost = (event: Event) => {
+      event.preventDefault(); contextLost = true;
+      cancelAnimationFrame(raf); raf = 0;
+    };
+    canvas.addEventListener('webglcontextlost', onContextLost);
 
     const syncPalette = () => {
       const s = settingsRef.current;
@@ -446,6 +452,7 @@ const Grainient = ({
     };
 
     const draw = () => {
+      if (contextLost) return;
       const s = settingsRef.current;
       const aspect = view.width / view.height;
       syncPalette();
@@ -489,6 +496,7 @@ const Grainient = ({
     };
 
     const resize = () => {
+      if (contextLost) return;
       const s = settingsRef.current;
       view.width = Math.max(1, container.clientWidth);
       view.height = Math.max(1, container.clientHeight);
@@ -569,7 +577,7 @@ const Grainient = ({
 
     const frame = (now: number) => {
       raf = 0;
-      if (!visible || document.hidden) return;
+      if (contextLost || !visible || document.hidden) return;
       const s = settingsRef.current;
       const dt = last ? clamp((now - last) / 1000, 0.001, 0.05) : 1 / 60;
       last = now;
@@ -589,7 +597,7 @@ const Grainient = ({
     };
 
     function wake() {
-      if (!raf && visible && !document.hidden) raf = requestAnimationFrame(frame);
+      if (!contextLost && !raf && visible && !document.hidden) raf = requestAnimationFrame(frame);
     }
 
     const locate = (event: PointerEvent) => {
@@ -653,6 +661,7 @@ const Grainient = ({
 
     return () => {
       cancelAnimationFrame(raf);
+      canvas.removeEventListener('webglcontextlost', onContextLost);
       wakeRef.current = null;
       resizeObserver.disconnect();
       intersection.disconnect();

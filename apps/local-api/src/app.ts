@@ -1,3 +1,4 @@
+import { cloneVoice, CloneVoiceRequestSchema } from "./voiceClone.js";
 import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -23,6 +24,7 @@ import { searchGpt } from "./gpt/search.js";
 import { createDataClient, type DataClient } from "./data/index.js";
 import { validateImageAttachment, imageInputErrorMessage, type ImageDecoder } from "./images.js";
 import { decodeImage } from "./imageDecoder.js";
+import { DecisionManager } from "./decision/manager.js";
 
 /**
  * Vivic local decision API. Loopback only, bearer-guarded, zod on every
@@ -38,6 +40,7 @@ export interface AppDeps {
   gpt?: GptProvider;
   data?: DataClient;
   imageDecoder?: ImageDecoder;
+  decision?: DecisionManager;
 }
 
 const tokenOk = (presented: string, expected: string): boolean => {
@@ -57,9 +60,11 @@ export const createApp = (deps: AppDeps) => {
   const credentials = deps.credentials ?? new CredentialStore();
   const gpt = deps.gpt ?? new GptProvider({ fetchImpl: deps.fetchImpl });
   const data = deps.data ?? createDataClient({ fetchImpl: deps.fetchImpl });
+  const decision = deps.decision ?? new DecisionManager();
   let activeProvider: "stepfun" | "gpt" = "stepfun";
   let providerRevision = 0;
   const search = deps.search ?? (config.searchEnabled ? createSearchClient({ credentials, fetchImpl: deps.fetchImpl,
+    config: { publicDnsFallback: config.publicDnsFallback === true },
     selectSearch: () => activeProvider === "gpt" ? (query, signal) => searchGpt(gpt, query, signal, deps.fetchImpl) : undefined,
     captureSession: () => { const version = providerRevision; return () => version === providerRevision; },
   }) : undefined);
@@ -214,6 +219,28 @@ export const createApp = (deps: AppDeps) => {
   app.post("/api/gpt/login/cancel", c => { gpt.cancelLogin(); return c.json({ ok: true }); });
   app.post("/api/gpt/disconnect", async c => { providerRevision++; await gpt.disconnect(); return c.json({ ok: true }); });
 
+  const clonedVoices = new WeakMap<object, Set<string>>();
+  app.get("/api/speech/cloned-voices", c => {
+    c.header("Cache-Control", "no-store");
+    const credential = credentials.getSecret();
+    return c.json({ voices: credential ? [...(clonedVoices.get(credential) ?? [])] : [] });
+  });
+  app.post("/api/speech/cloned-voices", bodyLimit({ maxSize: 4096 }), async c => {
+    c.header("Cache-Control", "no-store");
+    const input = CloneVoiceRequestSchema.safeParse(await readJson(c));
+    if (!input.success) return c.json({ ok: false, error: "请提供有效 File ID、可选原文，并确认你有权使用该声音。" }, 400);
+    const credential = credentials.getSecret();
+    if (!credential) return c.json({ ok: false, error: "请先连接 StepFun Plan。" }, 503);
+    try {
+      const id = await cloneVoice(credential, input.data, { ...stepfun, timeoutMs: config.speechTimeoutMs ?? 15000 }, c.req.raw.signal);
+      if (credentials.getSecret() !== credential || c.req.raw.signal.aborted) return c.json({ ok: false, error: "连接已变更，复刻结果未启用。" }, 503);
+      const voices = clonedVoices.get(credential) ?? new Set<string>();
+      if (voices.size >= 20) voices.delete(voices.values().next().value!);
+      voices.add(id); clonedVoices.set(credential, voices);
+      return c.json({ ok: true, id });
+    } catch { return c.json({ ok: false, error: "Plan 音色复刻未完成，请检查文件时长、权限、额度或连接；没有切换计费接口。" }, 503); }
+  });
+
   app.get("/api/speech/voices", (c) => {
     c.header("Cache-Control", "no-store");
     return c.json({
@@ -248,9 +275,11 @@ export const createApp = (deps: AppDeps) => {
     if (!credential) {
       return c.json({ ok: false, code: "speech-disconnected", error: "语音不可用：请先连接 StepFun Coding Plan Key。" }, 503);
     }
+    if (parsed.data.clonedVoiceId && !clonedVoices.get(credential)?.has(parsed.data.clonedVoiceId))
+      return c.json({ ok: false, code: "speech-unknown-voice", error: "该复刻音色未在当前连接中确认，请重新复刻或使用官方音色。" }, 400);
     const result = await synthesizeSpeech(credential, parsed.data.text, {
       ...stepfun, timeoutMs: config.speechTimeoutMs ?? 15000,
-    }, c.req.raw.signal, parsed.data);
+    }, c.req.raw.signal, { ...parsed.data, ...(parsed.data.clonedVoiceId ? { voice: parsed.data.clonedVoiceId } : {}) });
     // A disconnect/reconnect during synthesis must not deliver stale audio.
     if (credentials.getSecret() !== credential) {
       return c.json({ ok: false, code: "speech-disconnected", error: "语音已取消：模型连接已变更。" }, 503);
@@ -263,6 +292,12 @@ export const createApp = (deps: AppDeps) => {
     c.header("X-Content-Type-Options", "nosniff");
     return c.body(result.audio, 200);
   });
+
+  app.get("/api/decision/status", c => c.json(decision.status()));
+  app.post("/api/decision/prepare", c => c.json(decision.prepare()));
+  app.post("/api/decision/stop", c => c.json(decision.stop()));
+  app.post("/api/decision/clear", c => c.json(decision.clear()));
+  app.post("/api/decision/enable", c => c.json(decision.enable()));
 
   app.post("/api/intent", bodyLimit({ maxSize: 6 * 1024 * 1024,
     onError: c => c.json({ ok: false, error: "图片指令请求过大。" }, 413),
@@ -295,7 +330,7 @@ export const createApp = (deps: AppDeps) => {
         return c.json({ kind: "error", message: "模型连接已变更，图片请求已取消。" });
       }
     }
-    const result = await runIntent(parsed.data, { credentials, stepfun, search, data,
+    const result = await runIntent(parsed.data, { credentials, stepfun, search, data, decision,
       isSessionCurrent: () => version === providerRevision,
       ...(activeProvider === "gpt" ? { planner: { provider: "gpt" as const, connected: gpt.status().connected,
         generate: (messages, signal) => gpt.generate(messages, signal), isCurrent: () => gpt.isCurrent(gptVersion) } } : {}),
@@ -310,5 +345,5 @@ export const createApp = (deps: AppDeps) => {
   app.route("/api", createAsrRoutes({ config, credentials, fetchImpl: deps.fetchImpl }));
   if (search) app.route("/api", createSearchRoutes({ client: search }));
   else app.post("/api/search", c => c.json({ ok: false, error: "联网查询未启用。" }, 503));
-  return app;
+  return Object.assign(app, { dispose: () => decision.stop() });
 };
