@@ -5,7 +5,8 @@ import type { CanvasContext } from "../schemas.js";
 import type { IntentResult } from "../intent/pipeline.js";
 import { aborted, bounded, DataError } from "./transport.js";
 import { CitySchema, lookupWeather, type WeatherResult } from "./weather.js";
-import { parseNumericIntent, isMixedInstruction } from "./numeric.js";
+import { parseNumericIntent } from "./numeric.js";
+import { parseWeatherInput } from "./weatherInput.js";
 import { transformDataIntent } from "./transform.js";
 import { encodeProvenance, PROVENANCE_FIELD } from "./provenance.js";
 
@@ -23,9 +24,9 @@ export interface DataClient {
   handleDataIntent(text: string, ctx: CanvasContext, signal?: AbortSignal): Promise<IntentResult | null>;
 }
 
-function envelope(ctx: CanvasContext, card: CardRecord): IntentResult {
+function envelope(ctx: CanvasContext, card: CardRecord, spokenText?: string): IntentResult {
   return { kind: "envelope", envelope: ActionEnvelopeSchema.parse({ schemaVersion: "0.6", requestId: `data_${randomUUID()}`,
-    canvasId: ctx.canvasId, actions: [...(ctx.stage === "STANDBY" ? [{ type: "stage.awaken" }] : []),
+    canvasId: ctx.canvasId, spokenText, actions: [...(ctx.stage === "STANDBY" ? [{ type: "stage.awaken" }] : []),
       { type: "card.create", card }, { type: "canvas.fit" }] }) };
 }
 
@@ -82,28 +83,19 @@ export async function handleDataIntent(text: string, ctx: CanvasContext, signal?
     const card: CardRecord = numeric.kind === "table"
       ? { ...common, type: "TableCard", displayProps: { columns: ["名称", "数值"], rows: numeric.rows.map(row => [row.label, row.value]) }, sourceData }
       : { ...common, type: "ChartCard", displayProps: { chartKind: numeric.kind, points: numeric.rows.map(row => ({ x: row.label, y: row.value })) }, sourceData };
-    return { ...envelope(ctx, card), usedProvider: "rules" };
+    return { ...envelope(ctx, card, numeric.kind === "table" ? "已创建表格" : "已创建图表"), usedProvider: "rules" };
   }
-  // Weather commands are full-string matches: no partial success for mixed actions.
-  const raw = text.trim().replace(/^(?:请帮我|请|帮我)\s*/, "").replace(/^(?:查询|查一下|查看|查查|显示|查)\s*/, "").replace(/[。？?！!]$/, "").trim();
-  if ((raw.match(/天气|气温/g)?.length ?? 0) > 1 || isMixedInstruction(raw.replace(/天气/g, ""))
-    || /[；;\n]|然后|顺便|再(?:查|画|建|删)|并(?:查|画|建|删)|以及|同时|、/.test(raw)) {
-    return { kind: "clarify", message: "请一次查询一个城市的当前天气，其他操作请另发指令；本次没有执行任何部分。" };
-  }
-  if (/明天|后天|昨天|未来|下周|本周|一周|小时|预报|早上|晚上|今晚/.test(raw)) {
-    return { kind: "clarify", message: "目前支持城市的当前天气；请写成「城市当前天气」。" };
-  }
-  const match = raw.match(/^(.*?)\s*(?:(?:的)?(?:今天|现在|当前|实时))?\s*(?:的)?(?:天气|气温)(?:怎么样|如何)?$/u);
-  let city = match?.[1]?.trim() ?? "";
-  // Bare 「今天天气」 must not become a city named 今天.
-  city = city.replace(/(?:的)?(?:今天|现在|当前|实时)$/, "").replace(/的$/, "").trim();
-  if (!city || /^(?:今天|现在|当前|实时|这里|当地|本地|附近|我这|我这里)$/.test(city) || !CitySchema.safeParse(city).success) {
-    return { kind: "clarify", message: "请明确城市名，例如「上海,上海市天气」；不会使用 GPS 或猜测所在地。" };
-  }
+  const request = parseWeatherInput(text);
+  if (!request || request.kind === "clarify") return request;
+  const { city } = request;
   try {
     const weather = await (client ?? (shared ??= createDataClient())).weather(city, signal);
     if (signal?.aborted) throw aborted(signal);
-    if (weather.kind === "clarify") return { kind: "clarify", message: weather.message };
+    if (weather.kind === "clarify") {
+      const suggestions = [...new Set(weather.candidates.map(location => `${location.name},${location.admin1 ?? location.country}天气`))]
+        .filter(value => value.length <= 100).slice(0, 5);
+      return { kind: "clarify", message: weather.message, ...(suggestions.length ? { suggestions } : {}) };
+    }
     return envelope(ctx, { ...common, type: "WeatherCard", displayProps: { tempC: weather.tempC, conditionIcon: weather.conditionIcon },
       sources: weather.sources, metadata: { ...common.metadata, aliases: [weather.location.name.slice(0, 80)] },
       sourceData: { provenance: "open-meteo", requestedCity: city, location: weather.location,
@@ -112,7 +104,7 @@ export async function handleDataIntent(text: string, ctx: CanvasContext, signal?
         intervalSeconds: weather.intervalSeconds, modelGrid: weather.modelGrid,
         attribution: { weather: { name: "Open-Meteo", url: "https://open-meteo.com/" },
           geocoding: { name: "GeoNames", url: "https://www.geonames.org/" }, license: "https://creativecommons.org/licenses/by/4.0/",
-          changes: "Selected current fields; WMO code mapped to card icon." } } });
+          changes: "Selected current fields; WMO code mapped to card icon." } } }, `已显示${weather.location.name}当前天气`);
   } catch (error) {
     const safe = error instanceof DataError ? error : new DataError("unavailable");
     return { kind: "error", message: safe.message };

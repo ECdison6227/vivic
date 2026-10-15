@@ -18,8 +18,17 @@ import { cancelVoiceInput, getVoiceInputSnapshot, isVoiceInputBusy, subscribeVoi
 import { LocalSpeechSettings } from "./LocalSpeechSettings";
 import { CanvasSettings } from "./CanvasSettings";
 import type { Attachment } from "@/ai/attachments";
+import { startsNewInstruction } from "@vivic/contracts";
 
 export const INTENT_TIMEOUT_MS = 100_000;
+
+/** A non-action result must still reach Display after the thinking lease ends. */
+const publishFeedback = (host: ControlHost, text: string) => {
+  const { activeCanvasId, ownerMode } = host.getSnapshot();
+  if (!activeCanvasId || ownerMode !== "owner") return;
+  host.dispatch({ schemaVersion: "0.6", requestId: newId("feedback"), canvasId: activeCanvasId,
+    actions: [{ type: "subtitle.show", text: text.slice(0, 120), durationMs: 12000 }] });
+};
 
 declare global {
   interface Window {
@@ -37,6 +46,7 @@ export const ControlApp = () => {
   const [host, setHost] = useState<ControlHost | null>(null);
   const [clarify, setClarify] = useState<ClarifyState | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef<{
@@ -53,6 +63,7 @@ export const ControlApp = () => {
   const cancelPending = useCallback(() => {
     cancelVoiceInput();
     cancelSpeech();
+    setSuggestions([]);
     const current = pending.current;
     if (!current) return;
     pending.current = null;
@@ -158,7 +169,7 @@ export const ControlApp = () => {
     const unsubscribe = host.subscribe(() => {
       const current = pending.current;
       const snap = host.getSnapshot();
-      if (snap.activeCanvasId !== lastCanvasId || snap.ownerMode !== "owner") { cancelSpeech(); cancelVoiceInput(); setClarify(null); }
+      if (snap.activeCanvasId !== lastCanvasId || snap.ownerMode !== "owner") { cancelSpeech(); cancelVoiceInput(); setClarify(null); setSuggestions([]); previousQuestion.current = null; }
       lastCanvasId = snap.activeCanvasId;
       if (current && (snap.activeCanvasId !== current.canvasId || snap.ownerMode !== "owner")) {
         cancelPending();
@@ -204,6 +215,7 @@ export const ControlApp = () => {
       const { activeCanvasId } = h.getSnapshot();
       if (result.kind === "unknown") {
         setFeedback(result.message);
+        publishFeedback(h, result.message);
         return;
       }
       if (result.kind === "undo") {
@@ -236,9 +248,9 @@ export const ControlApp = () => {
         spokenText: result.spokenText,
         actions: result.actions,
       });
-      setFeedback(
-        res.ok ? result.description : `指令未执行（${res.ok ? "" : res.error}）`,
-      );
+      const message = res.ok ? result.description : `指令未执行（${res.error}）`;
+      setFeedback(message);
+      if (!res.ok) publishFeedback(h, message);
       if (res.ok && result.spokenText) void speakText(result.spokenText, { requestId: newId("speech") });
     },
     [],
@@ -255,7 +267,7 @@ export const ControlApp = () => {
       const trimmed = text.trim();
       const previous = previousQuestion.current;
       const continuation = previous && previous.canvasId === activeCanvasId && Date.now() - previous.at < 120_000 && trimmed.length <= 80
-        && !attachments?.length && !/^(?:搜索|搜|查|创建|新建|添加|删除|取消|打开|显示|恢复|撤销)/.test(trimmed)
+        && !attachments?.length && !startsNewInstruction(trimmed)
         ? { utterance: previous.utterance, question: previous.question } : undefined;
       previousQuestion.current = null;
       if (!attachments?.length && /^(?:重新排布|整理布局|整理画布|排好卡片)$/.test(trimmed)) {
@@ -319,11 +331,9 @@ export const ControlApp = () => {
           setBackendOnline(true);
           if (result.kind === "envelope" && result.envelope) {
             const res = host.dispatch(result.envelope);
-            setFeedback(
-              res.ok
-                ? result.envelope.spokenText ?? "已执行"
-                : `指令未执行（${res.ok ? "" : res.error}）`,
-            );
+            const message = res.ok ? result.envelope.spokenText ?? "已执行" : `指令未执行（${res.error}）`;
+            setFeedback(message);
+            if (!res.ok) publishFeedback(host, message);
             if (res.ok && !res.deduplicated && result.envelope.spokenText) {
               void speakText(result.envelope.spokenText, { requestId: result.envelope.requestId });
             }
@@ -338,7 +348,10 @@ export const ControlApp = () => {
             if (local.kind !== "unknown") {
               applyResult(host, local);
             } else {
-              setFeedback(result.message ?? local.message);
+              const message = result.message ?? local.message;
+              setFeedback(message);
+              publishFeedback(host, message);
+              setSuggestions(result.suggestions ?? []);
               if (result.kind === "clarify" && result.message) previousQuestion.current = {
                 canvasId: activeCanvasId, utterance: continuation?.utterance ?? trimmed,
                 question: result.message.slice(0, 180), at: Date.now(),
@@ -349,6 +362,7 @@ export const ControlApp = () => {
           if (!isCurrent()) return;
           if (error instanceof DOMException && error.name === "TimeoutError") {
             setFeedback("本次请求超时，请重试。");
+            publishFeedback(host, "本次请求超时，请重试。");
             return;
           }
           setBackendOnline(false);
@@ -407,6 +421,7 @@ export const ControlApp = () => {
       host={host}
       clarify={clarify}
       feedback={feedback}
+      suggestions={suggestions}
       onSubmit={submitCommand}
       onPickClarify={pickClarify}
       onCancelClarify={() => setClarify(null)}
@@ -422,6 +437,7 @@ interface ShellProps {
   host: ControlHost;
   clarify: ClarifyState | null;
   feedback: string | null;
+  suggestions: string[];
   backendOnline: boolean | null;
   onSubmit: (text: string, attachments?: Attachment[]) => void;
   onPickClarify: (candidate: ResolvedCard) => void;
@@ -480,6 +496,7 @@ const ControlShell = (props: ShellProps) => {
           disabled={readonly || !snap.ready}
           clarify={props.clarify}
           feedback={props.feedback}
+          suggestions={props.suggestions}
           backendOnline={props.backendOnline}
           onSubmit={props.onSubmit}
           onPickClarify={props.onPickClarify}

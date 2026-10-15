@@ -24,6 +24,7 @@ interface CommandSectionProps {
   disabled: boolean;
   clarify: ClarifyState | null;
   feedback: string | null;
+  suggestions?: string[];
   backendOnline: boolean | null;
   onSubmit: (text: string, attachments?: Attachment[]) => void;
   ownerKey?: string;
@@ -37,6 +38,7 @@ export const CommandSection = ({
   disabled,
   clarify,
   feedback,
+  suggestions = [],
   backendOnline,
   onSubmit,
   onPickClarify,
@@ -217,6 +219,10 @@ export const CommandSection = ({
       >
         {feedback ?? "输入指令即可操作画布；复杂指令由已连接的模型理解。"}
       </p>
+      {suggestions.length > 0 && <div className="mt-2 flex flex-wrap gap-2" data-vivic-data-suggestions>
+        {suggestions.map(suggestion => <Button key={suggestion} type="button" variant="outline" size="sm"
+          disabled={disabled || busy} onClick={() => { setText(""); onSubmit(suggestion); }}>{suggestion}</Button>)}
+      </div>}
     </section>
   );
 };

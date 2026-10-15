@@ -2,14 +2,14 @@ export interface NumericRow { label: string; value: number }
 export type NumericIntent = { kind: "table" | "bar" | "line" | "pie"; rows: NumericRow[] } | { kind: "clarify"; message: string };
 const instruction = /删除|清空|取消|撤销|恢复|聚焦|放大|缩小|切换|倒计时|提醒|待办|天气|然后|并且|同时|接着|再帮|再画|再建|再删|另外|以及|并(?:创建|生成|删除|清空|记录|显示)/;
 export const isMixedInstruction = (text: string) => instruction.test(text);
-const example = "请一次提供一组「名称 数值」，如「用表格记录：苹果3，香蕉5」；图表请指定柱状图、折线图或饼图。";
+const example = "表格需要你提供数据。请回复一组「名称 数值」，如「周一3，周二5，周三4」；也可完整输入「用表格记录：周一3，周二5，周三4」。";
 
 /** One explicit, bounded data series only; never infer, aggregate or fabricate values. */
 export function parseNumericIntent(text: string): NumericIntent | null {
   if (!/表格|柱状图|条形图|折线图|饼图|图表/.test(text)) return null;
   if (isMixedInstruction(text)) return { kind: "clarify", message: "这条指令包含多个操作，请拆成单项指令；本次没有执行任何部分。" };
-  const raw = text.replace(/^(?:请帮我|请|帮我)\s*/, "").replace(/[。！!]$/, "").trim();
-  const table = raw.match(/^(?:用表格(?:记录|展示|表示)|(?:创建|生成|做个|制作)表格|表格(?:记录)?|把(?:这组|这些)?数据(?:整理|做)成表格)\s*[：:]\s*(.+)$/s);
+  const raw = text.replace(/^(?:请帮我|请|帮我|给我)\s*/, "").replace(/[。！!]$/, "").trim();
+  const table = raw.match(/^(?:用表格(?:记录|展示|表示)|(?:创建|新建|生成|做个|制作)(?:一?[个张])?表格|表格(?:记录)?|把(?:这组|这些)?数据(?:整理|做)成表格)\s*[：:]\s*(.+)$/s);
   const chart = raw.match(/^(?:把(?:这组|这些)?数据)?(?:画成|绘成|生成|创建|制作|画个|用)?(柱状图|条形图|折线图|饼图)\s*[：:]\s*(.+)$/s);
   if (!table && !chart) return { kind: "clarify", message: example };
   const kinds = { 柱状图: "bar", 条形图: "bar", 折线图: "line", 饼图: "pie" } as const;

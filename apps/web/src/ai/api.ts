@@ -31,6 +31,7 @@ export interface IntentResult {
   kind: "envelope" | "clarify" | "unknown" | "error";
   envelope?: ActionEnvelope;
   message?: string;
+  suggestions?: string[];
   usedProvider?: "rules" | "stepfun" | "gpt" | "rules-offline" | "search";
 }
 

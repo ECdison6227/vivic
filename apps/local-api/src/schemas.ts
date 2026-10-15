@@ -52,6 +52,7 @@ export const IntentResponseSchema = z.strictObject({
   kind: z.enum(["envelope", "clarify", "unknown", "error"]),
   envelope: ActionEnvelopeSchema.optional(),
   message: z.string().max(400).optional(),
+  suggestions: z.array(z.string().min(1).max(100)).max(5).optional(),
   usedProvider: z.enum(["rules", "stepfun", "gpt", "rules-offline", "search"]).optional(),
 });
 
