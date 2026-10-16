@@ -18,6 +18,7 @@
 
 - 仅允许 `web_search_exa`，固定 `https://mcp.exa.ai/mcp?tools=web_search_exa`；不能传 tool 名、provider、proxy、endpoint、includeContent。
 - 原上游 `fetch` 换为 Vivic 自己的有界 HTTPS 传输；DNS 全部答案验证后固定到 socket lookup，搜索 endpoint 拒绝重定向。
+- 2026-10-16：该固定 endpoint 可先经用户代理（`VIVIC_SEARCH_PROXY`/环境/系统代理，由服务端配置，调用方不能指定），同样受字节、类型、编码限制；代理失败再走上述固定 IP 直连。代理仅用于此固定 endpoint，`/fetch` 不使用。跨 provider 的回退在 Vivic `client.ts`，不来自上游。
 - 超时由调用侧统一管理；字节上限适用于整个 RPC 响应；错误正文不回传、不记录。
 - 检查 RPC 版本/id/content，检测实际观察到的 HTTP 200 + `_meta["ai.exa/rateLimited"]` 限流响应，不按成功处理。
 - `client.ts` 从上游文本片段或 JSON highlights/text 生成 bounded snippet；不使用上游默认空 snippet 映射，不自动读取来源网页。

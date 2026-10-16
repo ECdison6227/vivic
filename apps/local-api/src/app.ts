@@ -21,6 +21,7 @@ import { createAsrRoutes, ASR_BODY_LIMIT_BYTES } from "./asr.js";
 import { createSearchClient, createSearchRoutes, type SearchClient } from "./search/index.js";
 import { GptProvider } from "./gpt/provider.js";
 import { searchGpt } from "./gpt/search.js";
+import { cachedProxy, resolveSearchProxy } from "./openaiProxy.js";
 import { createDataClient, type DataClient } from "./data/index.js";
 import { validateImageAttachment, imageInputErrorMessage, type ImageDecoder } from "./images.js";
 import { decodeImage } from "./imageDecoder.js";
@@ -63,9 +64,12 @@ export const createApp = (deps: AppDeps) => {
   const decision = deps.decision ?? new DecisionManager();
   let activeProvider: "stepfun" | "gpt" = "stepfun";
   let providerRevision = 0;
+  const searchProxy = config.searchProxy ? cachedProxy(() => resolveSearchProxy(config.searchProxy, process.env)) : undefined;
   const search = deps.search ?? (config.searchEnabled ? createSearchClient({ credentials, fetchImpl: deps.fetchImpl,
     config: { publicDnsFallback: config.publicDnsFallback === true },
-    selectSearch: () => activeProvider === "gpt" ? (query, signal) => searchGpt(gpt, query, signal, deps.fetchImpl) : undefined,
+    gpt: { connected: () => gpt.status().connected, preferred: () => activeProvider === "gpt",
+      search: (query, signal) => searchGpt(gpt, query, signal, deps.fetchImpl) },
+    searchProxy: () => searchProxy?.()?.url,
     captureSession: () => { const version = providerRevision; return () => version === providerRevision; },
   }) : undefined);
   const stepfun = {

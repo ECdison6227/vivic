@@ -35,7 +35,9 @@ GPT 订阅登录不当作通用 OpenAI API Key 或 STT/TTS 授权。固定官方
 
 StepFun 推理默认 `https://api.stepfun.com/step_plan/v1`，目录和短推理均通过后保存内存 Key。Plan ASR/TTS 独立使用 `stepaudio-2.5-asr` / `stepaudio-2.5-tts`，不向语音模型发送规划请求，不静默转普通按量路径。
 
-StepSearch 固定 `https://api.stepfun.com/step_plan/v1/mcp/web_search/mcp`，复用 Plan Key，调用实测 `web_search(query,n)`；使用服务端遵循的 MCP `2024-11-05`，未知版本 fail closed。工具和浏览器来源卡已有真实成功记录；鉴权/限流失败不静默改走其他付费路径。
+StepSearch 固定 `https://api.stepfun.com/step_plan/v1/mcp/web_search/mcp`，复用 Plan Key，调用实测 `web_search(query,n)`；使用服务端遵循的 MCP `2024-11-05`，未知版本 fail closed。工具和浏览器来源卡已有真实成功记录。
+
+**搜索回退链（2026-10-16 起，见 [search-fallback](search-fallback-20261016.md)）：** 依次尝试所选模型的搜索（GPT 仅在已连接时）、另一条已连接的搜索、最后无凭据公共搜索（Exa）；任一路返回来源即止，空结果继续下一路。改用非所选路径时结果提示会写明「X 不可用，已改用 Y」，不静默切换；调用方取消或模型连接变更立即终止，不再回退。无凭据搜索只发送查询，不带任何 Key。
 
 GPT/StepFun 搜索保留真实标题/URL、时间和 provider，来源文本作为非可信数据；空摘要不补造。无凭据 Exa 子集仍受 fake-IP DNS/免费额度影响。任意 `/fetch` 保持 DNS **全部地址**验证、每跳校验与 socket pin；本机 fake-IP 拒绝仍是限制，不能为搜索可用而放宽通用 SSRF。搜索成功不证明全文提取、模型比较或来源可靠性自动验收。
 

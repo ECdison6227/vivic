@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { createModels, type CredentialStore, type AuthPrompt, type AuthEvent, type Model, type Api } from "@earendil-works/pi-ai";
+import { createModels, type CredentialStore, type AuthPrompt, type AuthEvent, type Model, type Api, type OAuthAuth } from "@earendil-works/pi-ai";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import type { ChatMessage, StepfunResult } from "../stepfun.js";
@@ -34,10 +34,51 @@ function oauthStorage(storage: CredentialStore): CredentialStore {
     async delete(provider, options) { allowed(provider); return storage.delete(provider, options); },
   };
 }
-function runtime(storage: CredentialStore) {
+function runtime(storage: CredentialStore, oauthLogin?: OAuthAuth["login"]) {
   const models = createModels({ credentials: oauthStorage(storage), authContext: { env: async () => undefined, fileExists: async () => false } });
-  for (const provider of [openaiProvider(), openaiCodexProvider()]) models.setProvider({ ...provider, auth: { oauth: provider.auth.oauth } });
+  for (const provider of [openaiProvider(), openaiCodexProvider()]) {
+    const oauth = provider.auth.oauth;
+    models.setProvider({ ...provider, auth: { oauth: oauth && oauthLogin && provider.id === "openai" ? { ...oauth, login: oauthLogin } : oauth } });
+  }
   return models;
+}
+const errorText = (error: unknown) => {
+  const parts: string[] = [];
+  for (let value = error, depth = 0; value instanceof Error && depth < 4; value = value.cause, depth++) parts.push(value.message);
+  return parts.join("\n");
+};
+const errorCode = (error: unknown) => {
+  for (let value = error, depth = 0; value instanceof Error && depth < 4; value = value.cause, depth++) {
+    const code = (value as { code?: unknown }).code;
+    if (typeof code === "string" && /^[A-Z][A-Z0-9_]{2,40}$/.test(code)) return code;
+  }
+};
+const UNSUPPORTED_REGION = "unsupported_country_region_territory";
+/**
+ * Fixed text for OpenAI token-endpoint failures. Upstream messages can embed
+ * response bodies, so only an HTTP status and known codes are surfaced.
+ */
+function tokenEndpointFailure(error: unknown, action: string): string | undefined {
+  const text = errorText(error);
+  const status = /token request failed \((\d{3})\)/.exec(text)?.[1];
+  if (status && text.includes(UNSUPPORTED_REGION)) return `${action}失败（HTTP ${status}：${UNSUPPORTED_REGION}）。OpenAI 拒绝了 Vivic 后端当前的网络出口地区。后端会通过系统代理访问 OpenAI，请确认代理已开启且节点所在地区受支持（也可用 VIVIC_OPENAI_PROXY 指定代理）。`;
+  if (status) return `${action}失败（HTTP ${status}）。请稍后重新登录。`;
+  const code = errorCode(error);
+  if (code || /fetch failed/i.test(text)) return `${action}失败：Vivic 后端无法连接 OpenAI 授权服务器${code ? `（${code}）` : ""}。浏览器能完成授权不代表本机后端可以访问 auth.openai.com，请检查后端网络。`;
+}
+type LoginStage = "start" | "browser" | "exchange";
+function loginFailure(error: unknown, stage: LoginStage, timedOut: boolean): string {
+  const text = errorText(error);
+  if (timedOut) return "等待 ChatGPT 授权超时（5 分钟），未保存任何授权。请重新登录。";
+  if (/Credential store modify failed/.test(text)) return "已取得 ChatGPT 授权，但写入本机凭据（~/.vivic/auth.json）失败，请检查该文件权限或是否被其他程序锁定，然后重新登录。";
+  if (/Port 1455 is in use/.test(text) || errorCode(error) === "EADDRINUSE") return "回调端口 1455 已被占用（可能是 Codex CLI 或其他 Pi 会话未完成的登录），本次浏览器回调不会到达 Vivic。请先结束那边的登录再重试；Vivic 不会关闭其他程序。";
+  if (stage === "start") return "无法启动 ChatGPT 授权：本机回调服务（127.0.0.1:1455）或设备标识初始化失败。";
+  if (stage === "browser") {
+    if (/ChatGPT authorization failed/.test(text)) return "ChatGPT 未同意或拒绝了本次授权，未保存任何授权。请重新登录。";
+    return "回调地址无效或与本次登录不匹配，未保存任何授权。请重新登录；手动粘贴时需使用本次登录的完整回调地址。";
+  }
+  if (text.includes("chatgpt.tokens.use.direct")) return "ChatGPT 授权未包含 GPT 推理所需的 chatgpt.tokens.use.direct 权限，账号或套餐可能不支持此登录方式。";
+  return tokenEndpointFailure(error, "浏览器授权已完成，但授权码换取令牌") ?? "浏览器授权已完成，但授权码换取令牌失败（OpenAI 返回了无效响应），未保存任何授权。请重新登录。";
 }
 type Runtime = ReturnType<typeof runtime>;
 interface Connection { runtime: Runtime; storage: CredentialStore; source: GptSource; route: Route; model: Model<Api>; models: Model<Api>[]; }
@@ -46,7 +87,15 @@ export interface GptStatus {
   source?: GptSource; route?: Route; checkedAt?: string; lastError?: string;
 }
 interface LoginState { phase: "idle" | "waiting" | "verifying" | "connected" | "error"; authUrl?: string; needsInput?: boolean; prompt?: string; error?: string; }
-export interface GptDeps { fetchImpl?: typeof fetch; ownStorage?: CredentialStore; piStorage?: CredentialStore; authDir?: string; piAuthPath?: string; }
+export interface GptDeps {
+  fetchImpl?: typeof fetch; ownStorage?: CredentialStore; piStorage?: CredentialStore; authDir?: string; piAuthPath?: string;
+  /** TEST seam: replaces only Pi's browser callback/token exchange; Models.login persistence stays real. */
+  oauthLogin?: OAuthAuth["login"];
+}
+const NOT_FOUND: Record<GptSource, string> = {
+  vivic: "本机没有已保存的 ChatGPT 授权记录（~/.vivic/auth.json）。请点击 Continue with ChatGPT 重新授权。",
+  pi: "未找到本机 Pi 的 ChatGPT（openai / openai-codex）OAuth 登录；可改用 Continue with ChatGPT。",
+};
 
 /** Pi handles OAuth, token refresh and model requests. No agent session exists. */
 export class GptProvider {
@@ -83,22 +132,37 @@ export class GptProvider {
     this.#requests.clear();
   }
   async connect(source: GptSource, requestedModel?: string): Promise<boolean> {
-    this.cancelLogin(); this.#invalidate(); this.#error = undefined;
+    this.cancelLogin();
+    return this.#connect(source, requestedModel);
+  }
+  /** Does not touch login state, so a finished login stays "verifying" until the probe settles. */
+  async #connect(source: GptSource, requestedModel?: string): Promise<boolean> {
+    this.#invalidate(); this.#error = undefined;
     const version = this.#version;
     const controller = new AbortController(); this.#requests.add(controller);
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]);
-    let phase = "读取 Pi 登录";
+    let phase = source === "pi" ? "读取 Pi 登录" : "读取本机 GPT 授权";
     let httpStatus: number | undefined;
     let detail: string | undefined;
     try {
-      const storage = await this.#storage(source);
-      const models = runtime(storage);
-      const route = (await Promise.all(routes.map(async name => ({ name, value: await models.checkAuth(name, { signal }) })))).find(item => item.value?.type === "oauth")?.name;
-      if (!route) throw new Error("Pi login not found");
+      let storage: CredentialStore, models: Runtime, route: Route | undefined;
+      try {
+        storage = await this.#storage(source);
+        models = runtime(storage);
+        route = (await Promise.all(routes.map(async name => ({ name, value: await models.checkAuth(name, { signal }) })))).find(item => item.value?.type === "oauth")?.name;
+      } catch (error) {
+        if (!signal.aborted) detail = error instanceof Error && error.message === "Pi login not found" ? NOT_FOUND[source]
+          : "授权文件无法读取或格式无效；Vivic 不会自动清理或覆盖它。";
+        throw error;
+      }
+      if (!route) { detail = NOT_FOUND[source]; throw new Error("Pi login not found"); }
       phase = "刷新 GPT 授权";
       let available = [...await models.getAvailable(route, { signal })];
       if (route === "openai") {
-        const auth = await models.getAuth(route, { signal });
+        const auth = await models.getAuth(route, { signal }).catch(error => {
+          if (!signal.aborted) detail = tokenEndpointFailure(error, "刷新令牌") ?? "已保存的授权无法刷新，可能已被撤销或过期，请重新登录。";
+          throw error;
+        });
         if (!auth?.auth.apiKey) throw new Error("GPT not authorized");
         phase = "读取 GPT 模型目录";
         const getCatalog = async () => {
@@ -115,7 +179,11 @@ export class GptProvider {
           }
         };
         const response = await getCatalog();
-        if (!response.ok) { void response.body?.cancel(); throw new Error("Model catalog unavailable"); }
+        if (!response.ok) {
+          const code = await response.json().then(value => (value as { error?: { code?: unknown } })?.error?.code, () => undefined);
+          if (code === UNSUPPORTED_REGION) detail = `OpenAI 拒绝了 Vivic 后端当前的网络出口地区（${UNSUPPORTED_REGION}）。`;
+          throw new Error("Model catalog unavailable");
+        }
         const catalog = z.union([
           z.object({ models: z.array(z.object({ slug: z.string().max(256), visibility: z.string().nullable().optional() })).max(2000) })
             .transform(value => value.models.filter(row => row.visibility === undefined || row.visibility === "list").map(row => row.slug)),
@@ -144,7 +212,7 @@ export class GptProvider {
       this.#connection = connection; this.#checkedAt = new Date().toISOString();
       return true;
     } catch {
-      if (version === this.#version) this.#error = `${phase}失败${httpStatus ? `（HTTP ${httpStatus}）` : ""}。${detail ?? "请检查 Pi 登录、账号模型权限与套餐额度；也可重新登录。"}`;
+      if (version === this.#version) this.#error = `${phase}失败${httpStatus ? `（HTTP ${httpStatus}）` : ""}。${detail ?? `请检查${source === "pi" ? " Pi 登录、" : ""}账号模型权限与套餐额度；也可重新登录。`}`;
       return false;
     } finally { this.#requests.delete(controller); }
   }
@@ -215,25 +283,38 @@ export class GptProvider {
     const controller = new AbortController(); this.#loginAbort = controller;
     const version = this.#version;
     this.#login = { phase: "waiting" };
-    const storage = await this.#storage("vivic"); const models = runtime(storage);
+    let models: Runtime;
+    try { models = runtime(await this.#storage("vivic"), this.#deps.oauthLogin); } catch {
+      if (version === this.#version) { this.#loginAbort = undefined; this.#login = { phase: "error", error: "无法打开本机授权存储（~/.vivic/auth.json），未开始授权。请检查该文件权限后重试。" }; }
+      return this.loginStatus();
+    }
+    // The browser "Authentication successful" page appears once the callback
+    // arrives, before the backend exchanges the code; track the real stage.
+    let stage: LoginStage = "start";
+    const timeout = AbortSignal.timeout(300_000);
     const notify = (event: AuthEvent) => {
       if (version !== this.#version) return;
       if (event.type === "auth_url") {
         const url = new URL(event.url);
         if (url.origin !== "https://auth.openai.com") { controller.abort(); return; }
+        stage = "browser";
         this.#login = { ...this.#login, authUrl: url.href };
       }
+      if (event.type === "progress" && stage === "browser") stage = "exchange";
     };
     void models.login("openai", "oauth", {
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(300_000)]), notify,
+      signal: AbortSignal.any([controller.signal, timeout]), notify,
       prompt: (prompt: AuthPrompt) => new Promise<string>((resolve, reject) => {
         if (prompt.type !== "manual_code") { reject(new Error("Unexpected OAuth prompt")); return; }
         const signal = AbortSignal.any([controller.signal, ...(prompt.signal ? [prompt.signal] : [])]);
-        const abort = () => { this.#input = undefined; reject(new Error("Login cancelled")); };
+        // A superseded login must never clear the input slot of a newer one.
+        const settle = () => { signal.removeEventListener("abort", abort); if (this.#input === entry) this.#input = undefined; };
+        const abort = () => { settle(); reject(new Error("Login cancelled")); };
+        const entry = { resolve: (value: string) => { settle(); resolve(value); }, reject: abort };
         signal.addEventListener("abort", abort, { once: true });
-        if (signal.aborted) { abort(); return; }
+        if (signal.aborted || version !== this.#version) { abort(); return; }
         this.#login = { ...this.#login, needsInput: true, prompt: "在浏览器完成授权；若未自动返回，可粘贴完整回调地址。" };
-        this.#input = { resolve: value => { signal.removeEventListener("abort", abort); this.#input = undefined; resolve(value); }, reject: abort };
+        this.#input = entry;
       }),
     }, { agentName: "Vivic", getDeviceId: () => {
       const dir = this.#deps.authDir ?? join(homedir(), ".vivic"); mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -243,16 +324,25 @@ export class GptProvider {
       const value = randomUUID(); writeFileSync(path, value, { mode: 0o600 }); return value;
     } }).then(async () => {
       if (version !== this.#version || controller.signal.aborted) return;
-      this.#loginAbort = undefined; this.#login = { phase: "verifying" };
-      const ok = await this.connect("vivic");
-      this.#login = ok ? { phase: "connected" } : { phase: "error", error: this.#error };
-    }).catch(() => {
-      if (version === this.#version && !controller.signal.aborted) this.#login = { phase: "error", error: "GPT 登录未完成。请重试；如本机已有 Pi 登录，可直接使用。回调端口 1455 需可用。" };
+      // Saved credentials only prove authorization; connected requires a real probe.
+      const verifying: LoginState = { phase: "verifying" };
+      this.#loginAbort = undefined; this.#login = verifying;
+      const ok = await this.#connect("vivic");
+      if (this.#login === verifying) this.#login = ok ? { phase: "connected" } : { phase: "error", error: this.#error };
+    }, error => {
+      if (version === this.#version && !controller.signal.aborted) {
+        this.#loginAbort = undefined;
+        this.#login = { phase: "error", error: loginFailure(error, stage, timeout.aborted) };
+      }
     });
     return this.loginStatus();
   }
   provideLoginInput(value: string) { if (!this.#input) return false; this.#input.resolve(value); this.#login = { ...this.#login, needsInput: false }; return true; }
-  cancelLogin() { this.#loginAbort?.abort(); this.#loginAbort = undefined; this.#input?.reject(); this.#input = undefined; this.#login = { phase: "idle" }; }
+  cancelLogin() {
+    // Cancelling during verification must not let that probe connect afterwards.
+    if (this.#login.phase === "verifying") this.#invalidate();
+    this.#loginAbort?.abort(); this.#loginAbort = undefined; this.#input?.reject(); this.#input = undefined; this.#login = { phase: "idle" };
+  }
   async disconnect() {
     const c = this.#connection; this.cancelLogin(); this.#invalidate(); this.#error = undefined;
     // Disconnecting a reused Pi login must not sign the user's Pi CLI out.

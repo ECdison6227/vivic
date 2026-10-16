@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
-import { InMemoryCredentialStore, type OAuthCredential } from "@earendil-works/pi-ai";
-import { GptProvider } from "../src/gpt/provider.js";
+import { InMemoryCredentialStore, type CredentialStore, type OAuthCredential } from "@earendil-works/pi-ai";
+import { GptProvider, type GptDeps } from "../src/gpt/provider.js";
 import { searchGpt } from "../src/gpt/search.js";
 import { CODEX_RESPONSES, completedResponse, gptFetch, GPT_MODELS, GPT_RESPONSES, MAX_GPT_RESPONSE_BYTES } from "../src/gpt/transport.js";
 
@@ -736,5 +736,275 @@ describe("GPT transport bounds, endpoints and terminal frames", () => {
     for (const body of [Response.json({ output: searchOutput() }), new Response(ACCESS, { status: 403, headers: { "content-type": "text/event-stream" } })]) {
       await expect(completedResponse(body, new AbortController().signal)).rejects.toThrow("GPT search unavailable");
     }
+  });
+});
+
+// Login regressions: only Pi's browser callback + token exchange is replaced via
+// the oauthLogin seam. Models.login, the OAuth-only store wrapper, real disk
+// AuthStorage in temp dirs and the inference probe all run unmodified.
+type OAuthLogin = NonNullable<GptDeps["oauthLogin"]>;
+const AUTH_URL = "https://auth.openai.com/api/accounts/authorize?client_id=TEST";
+const CALLBACK = "http://127.0.0.1:1455/auth/callback?code=TEST&state=TEST";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Mirrors the Pi 1.2.0 flow order: auth_url, callback-or-paste, progress, exchange. */
+function piLikeLogin(callback: Promise<void>, exchange: () => Promise<OAuthCredential> = async () => credential()): OAuthLogin {
+  return async (interaction, options) => {
+    options?.getDeviceId?.();
+    interaction.notify({ type: "auth_url", url: AUTH_URL });
+    const manualAbort = new AbortController();
+    const manual = interaction.prompt({ type: "manual_code", message: "TEST", signal: AbortSignal.any([manualAbort.signal, interaction.signal]) })
+      .then(input => { if (!input.startsWith("http://127.0.0.1:1455/auth/callback")) throw new Error("Paste the full callback URL from the browser"); });
+    try {
+      await Promise.race([callback, manual]);
+      interaction.notify({ type: "progress", message: "Exchanging authorization code for tokens..." });
+      return await exchange();
+    } catch (error) {
+      if (interaction.signal.aborted) throw new Error("Login cancelled");
+      throw error;
+    } finally { manualAbort.abort(); }
+  };
+}
+function loginFixture(oauthLogin: OAuthLogin, options: { ownStorage?: CredentialStore } = {}) {
+  const directory = mkdtempSync(join(tmpdir(), "vivic-TEST-gpt-login-"));
+  const authPath = join(directory, "auth.json");
+  const piStorage = new InMemoryCredentialStore();
+  let probe: () => Response | Promise<Response> = () => piSse({ ok: true });
+  let catalog: () => Response | Promise<Response> = () => Response.json({ models: [{ slug: MODEL, visibility: "list" }] });
+  const fetchImpl = vi.fn<typeof fetch>(async input => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url === GPT_MODELS) return catalog();
+    if (url === GPT_RESPONSES) return probe();
+    throw new Error("Unexpected TEST login endpoint");
+  });
+  const gpt = new GptProvider({ authDir: directory, piStorage, fetchImpl, oauthLogin, ...(options.ownStorage ? { ownStorage: options.ownStorage } : {}) });
+  const saved = () => existsSync(authPath) ? JSON.parse(readFileSync(authPath, "utf8")) as Record<string, OAuthCredential> : undefined;
+  return { gpt, directory, authPath, piStorage, fetchImpl, saved,
+    probe: (next: typeof probe) => { probe = next; }, catalog: (next: typeof catalog) => { catalog = next; },
+    cleanup: async () => { await gpt.disconnect(); rmSync(directory, { recursive: true, force: true }); } };
+}
+type LoginFixture = ReturnType<typeof loginFixture>;
+const phase = (gpt: GptProvider, expected: string) => vi.waitFor(() => expect(gpt.loginStatus().phase).toBe(expected));
+
+describe("GPT browser login through the real Pi Models.login persistence", () => {
+  it("a completed callback is saved to ~/.vivic/auth.json, stays verifying until the probe passes, then restores after restart", async () => {
+    const callback = deferred<void>();
+    const f = loginFixture(piLikeLogin(callback.promise));
+    try {
+      expect(await f.gpt.startLogin()).toMatchObject({ phase: "waiting" });
+      await vi.waitFor(() => expect(f.gpt.loginStatus()).toMatchObject({ phase: "waiting", authUrl: AUTH_URL, needsInput: true }));
+      const probeEntered = deferred<void>(); const probe = deferred<Response>();
+      f.probe(() => { probeEntered.resolve(); return probe.promise; });
+      callback.resolve();
+      await probeEntered.promise;
+      // Saved authorization alone is not a connection, and verifying is not reset to idle.
+      expect(f.gpt.loginStatus()).toEqual({ phase: "verifying" });
+      expect(f.gpt.status().connected).toBe(false);
+      expect(Object.keys(f.saved()!)).toEqual(["openai"]);
+      expect(f.saved()!.openai).toMatchObject({ type: "oauth", access: ACCESS, refresh: REFRESH });
+      probe.resolve(piSse({ ok: true }));
+      await phase(f.gpt, "connected");
+      expect(f.gpt.status()).toMatchObject({ connected: true, source: "vivic", route: "openai", defaultModel: MODEL });
+      expect(f.fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([GPT_MODELS, GPT_RESPONSES]);
+      expect(readFileSync(join(f.directory, "device-id"), "utf8").trim()).toMatch(UUID);
+      expect(await f.piStorage.list()).toEqual([]);
+      expect(JSON.stringify([f.gpt.status(), f.gpt.loginStatus()])).not.toMatch(/TEST-access-private|TEST-refresh-private/);
+      // A fresh backend (no login seam) restores the saved Vivic login.
+      f.probe(() => piSse({ ok: true }));
+      const restarted = new GptProvider({ authDir: f.directory, fetchImpl: f.fetchImpl });
+      expect(await restarted.connect("vivic"), restarted.status().lastError).toBe(true);
+      expect(restarted.status()).toMatchObject({ connected: true, source: "vivic" });
+    } finally { await f.cleanup(); }
+  });
+
+  it.each(["missing", "empty", "malformed"] as const)("restoring with a %s ~/.vivic/auth.json names the real cause and never rewrites the file", async state => {
+    const f = loginFixture(piLikeLogin(new Promise(() => {})));
+    const original = state === "empty" ? "{}" : '{"PRIVATE_TEST_auth":';
+    if (state !== "missing") writeFileSync(f.authPath, original, { encoding: "utf8", mode: 0o600 });
+    try {
+      expect(await f.gpt.connect("vivic")).toBe(false);
+      const error = f.gpt.status().lastError!;
+      expect(error).toMatch(/^读取本机 GPT 授权失败。/);
+      expect(error).not.toContain("Pi 登录");
+      expect(error).toContain(state === "malformed" ? "无法读取或格式无效" : "本机没有已保存的 ChatGPT 授权记录");
+      expect(error).not.toContain("PRIVATE_TEST");
+      if (state !== "missing") expect(readFileSync(f.authPath, "utf8")).toBe(original);
+      expect(f.fetchImpl).not.toHaveBeenCalled();
+    } finally { await f.cleanup(); }
+  });
+
+  it("a Pi restore without a Pi OAuth record keeps the Pi-specific message and ignores Vivic's saved login", async () => {
+    const f = loginFixture(piLikeLogin(Promise.resolve()));
+    try {
+      await f.gpt.startLogin();
+      await phase(f.gpt, "connected");
+      expect(await f.gpt.connect("pi")).toBe(false);
+      expect(f.gpt.status().lastError).toContain("未找到本机 Pi 的 ChatGPT");
+      expect(f.saved()!.openai).toMatchObject({ type: "oauth" });
+      // And a Pi-only credential never satisfies a Vivic restore.
+      const own = new InMemoryCredentialStore(); const pi = new InMemoryCredentialStore();
+      await pi.modify("openai", async () => credential());
+      const isolated = new GptProvider({ ownStorage: own, piStorage: pi, fetchImpl: f.fetchImpl });
+      expect(await isolated.connect("vivic")).toBe(false);
+      expect(isolated.status().lastError).toContain("本机没有已保存的 ChatGPT 授权记录");
+    } finally { await f.cleanup(); }
+  });
+
+  it("the 5-minute login deadline reports a timeout and saves nothing", async () => {
+    const deadline = new AbortController();
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(ms => ms === 300_000 ? deadline.signal : timeout(ms));
+    const f = loginFixture(piLikeLogin(new Promise(() => {})));
+    try {
+      await f.gpt.startLogin();
+      await vi.waitFor(() => expect(f.gpt.loginStatus().needsInput).toBe(true));
+      deadline.abort(new DOMException("TEST deadline", "TimeoutError"));
+      await phase(f.gpt, "error");
+      expect(f.gpt.loginStatus().error).toContain("超时");
+      expect(f.saved()?.openai).toBeUndefined();
+      expect(f.gpt.status().connected).toBe(false);
+    } finally { await f.cleanup(); }
+  });
+
+  it("cancel aborts the flow and a late callback cannot save or connect", async () => {
+    const callback = deferred<void>();
+    let signal: AbortSignal | undefined;
+    const inner = piLikeLogin(callback.promise);
+    const f = loginFixture(async (interaction, options) => { signal = interaction.signal; return inner(interaction, options); });
+    try {
+      await f.gpt.startLogin();
+      await vi.waitFor(() => expect(f.gpt.loginStatus().needsInput).toBe(true));
+      f.gpt.cancelLogin();
+      expect(signal!.aborted).toBe(true);
+      expect(f.gpt.loginStatus()).toEqual({ phase: "idle" });
+      expect(f.gpt.provideLoginInput(CALLBACK)).toBe(false);
+      callback.resolve();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(f.gpt.loginStatus()).toEqual({ phase: "idle" });
+      expect(f.saved()?.openai).toBeUndefined();
+      expect(f.fetchImpl).not.toHaveBeenCalled();
+    } finally { await f.cleanup(); }
+  });
+
+  it("a repeated login supersedes the first; the stale flow neither saves nor clears the new paste input", async () => {
+    const firstGate = deferred<void>();
+    let firstPrompt: Promise<unknown> | undefined;
+    let calls = 0;
+    const second = piLikeLogin(new Promise(() => {}), async () => credential("TEST-access-second"));
+    const f = loginFixture(async (interaction, options) => {
+      if (++calls > 1) return second(interaction, options);
+      await firstGate.promise; // Still starting (e.g. binding the callback) when superseded.
+      firstPrompt = interaction.prompt({ type: "manual_code", message: "TEST stale", signal: interaction.signal }).catch(error => error);
+      await firstPrompt;
+      return credential("TEST-access-stale");
+    });
+    try {
+      await f.gpt.startLogin();
+      await f.gpt.startLogin();
+      await vi.waitFor(() => expect(f.gpt.loginStatus()).toMatchObject({ phase: "waiting", needsInput: true }));
+      firstGate.resolve();
+      await vi.waitFor(() => expect(firstPrompt).toBeDefined());
+      expect(await firstPrompt).toBeInstanceOf(Error);
+      expect(f.gpt.provideLoginInput(CALLBACK)).toBe(true);
+      await phase(f.gpt, "connected");
+      expect(f.saved()!.openai.access).toBe("TEST-access-second");
+      expect(calls).toBe(2);
+    } finally { await f.cleanup(); }
+  });
+
+  it.each([
+    { label: "Pi port message", error: new Error("Port 1455 is in use, probably by an unfinished login in another pi session or by the Codex CLI. Cancel that login and try again.") },
+    { label: "raw EADDRINUSE", error: Object.assign(new Error("listen EADDRINUSE: address already in use 127.0.0.1:1455"), { code: "EADDRINUSE" }) },
+  ])("callback port conflict ($label) is reported as port 1455 in use, before any authorization", async ({ error }) => {
+    const f = loginFixture(async () => { throw error; });
+    try {
+      await f.gpt.startLogin();
+      await phase(f.gpt, "error");
+      expect(f.gpt.loginStatus().error).toContain("回调端口 1455 已被占用");
+      expect(f.gpt.loginStatus().authUrl).toBeUndefined();
+      expect(f.saved()?.openai).toBeUndefined();
+    } finally { await f.cleanup(); }
+  });
+
+  it.each([
+    { label: "region 403", error: new Error('OpenAI OAuth token request failed (403): {"error":{"code":"unsupported_country_region_territory","message":"PRIVATE_TEST body"}}'), expected: ["HTTP 403", "unsupported_country_region_territory", "换取令牌"] },
+    { label: "HTTP 400", error: new Error("OpenAI OAuth token request failed (400): PRIVATE_TEST invalid_grant body"), expected: ["HTTP 400", "换取令牌"] },
+    { label: "network", error: new TypeError("fetch failed", { cause: Object.assign(new Error("PRIVATE_TEST connect 10.0.0.1"), { code: "UND_ERR_CONNECT_TIMEOUT" }) }), expected: ["无法连接 OpenAI 授权服务器", "UND_ERR_CONNECT_TIMEOUT"] },
+    { label: "missing direct scope", error: new Error("OpenAI OAuth grant did not include chatgpt.tokens.use.direct"), expected: ["chatgpt.tokens.use.direct"] },
+    { label: "invalid token body", error: new Error("OpenAI OAuth token response has invalid access_token PRIVATE_TEST"), expected: ["无效响应"] },
+  ])("token exchange failure ($label) after a successful browser callback is classified safely", async ({ error, expected }) => {
+    const f = loginFixture(piLikeLogin(Promise.resolve(), async () => { throw error; }));
+    try {
+      await f.gpt.startLogin();
+      await phase(f.gpt, "error");
+      const message = f.gpt.loginStatus().error!;
+      expect(message).toContain(expected.includes("chatgpt.tokens.use.direct") ? "chatgpt.tokens.use.direct" : "浏览器授权已完成");
+      for (const part of expected) expect(message).toContain(part);
+      expect(message).not.toMatch(/PRIVATE_TEST|10\.0\.0\.1|读取 Pi 登录/);
+      expect(f.saved()?.openai).toBeUndefined();
+      expect(f.gpt.status().connected).toBe(false);
+      expect(f.fetchImpl).not.toHaveBeenCalled();
+    } finally { await f.cleanup(); }
+  });
+
+  it.each([
+    { label: "denied in browser", callback: () => Promise.reject(new Error("ChatGPT authorization failed: access_denied")), paste: undefined, expected: "拒绝了本次授权" },
+    { label: "wrong pasted URL", callback: () => new Promise<void>(() => {}), paste: "https://example.test/PRIVATE_TEST", expected: "回调地址无效" },
+  ])("browser-stage failure ($label) is not reported as a token or Pi read failure", async ({ callback, paste, expected }) => {
+    const pending = callback(); pending.catch(() => {});
+    const f = loginFixture(piLikeLogin(pending));
+    try {
+      await f.gpt.startLogin();
+      if (paste) { await vi.waitFor(() => expect(f.gpt.loginStatus().needsInput).toBe(true)); expect(f.gpt.provideLoginInput(paste)).toBe(true); }
+      await phase(f.gpt, "error");
+      expect(f.gpt.loginStatus().error).toContain(expected);
+      expect(f.gpt.loginStatus().error).not.toContain("PRIVATE_TEST");
+      expect(f.saved()?.openai).toBeUndefined();
+    } finally { await f.cleanup(); }
+  });
+
+  it("a credential store write failure says authorization succeeded but saving failed", async () => {
+    const ownStorage = new InMemoryCredentialStore();
+    vi.spyOn(ownStorage, "modify").mockRejectedValue(new Error("PRIVATE_TEST EPERM lock"));
+    const f = loginFixture(piLikeLogin(Promise.resolve()), { ownStorage });
+    try {
+      await f.gpt.startLogin();
+      await phase(f.gpt, "error");
+      expect(f.gpt.loginStatus().error).toContain("写入本机凭据");
+      expect(f.gpt.loginStatus().error).not.toContain("PRIVATE_TEST");
+      expect(await ownStorage.read("openai")).toBeUndefined();
+    } finally { await f.cleanup(); }
+  });
+
+  it.each([
+    { label: "catalog region 403", setup: (f: LoginFixture) => f.catalog(() => Response.json({ error: { code: "unsupported_country_region_territory", message: "PRIVATE_TEST" } }, { status: 403 })), expected: ["读取 GPT 模型目录失败（HTTP 403）", "unsupported_country_region_territory"] },
+    { label: "inference 401", setup: (f: LoginFixture) => f.probe(() => new Response("PRIVATE_TEST denied", { status: 401 })), expected: ["验证 GPT 推理失败（HTTP 401）"] },
+  ])("saved authorization whose model check fails ($label) ends in error, never connected", async ({ setup, expected }) => {
+    const f = loginFixture(piLikeLogin(Promise.resolve()));
+    setup(f);
+    try {
+      await f.gpt.startLogin();
+      await phase(f.gpt, "error");
+      for (const part of expected) expect(f.gpt.loginStatus().error).toContain(part);
+      expect(f.gpt.loginStatus().error).not.toContain("PRIVATE_TEST");
+      expect(f.gpt.status()).toMatchObject({ connected: false });
+      // The authorization itself was saved, so a later restore can retry verification.
+      expect(f.saved()!.openai).toMatchObject({ type: "oauth" });
+    } finally { await f.cleanup(); }
+  });
+
+  it("cancelling while verifying drops the probe result instead of connecting", async () => {
+    const f = loginFixture(piLikeLogin(Promise.resolve()));
+    const entered = deferred<void>(); const probe = deferred<Response>();
+    f.probe(() => { entered.resolve(); return probe.promise; });
+    try {
+      await f.gpt.startLogin();
+      await entered.promise;
+      expect(f.gpt.loginStatus().phase).toBe("verifying");
+      f.gpt.cancelLogin();
+      probe.resolve(piSse({ ok: true }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(f.gpt.loginStatus()).toEqual({ phase: "idle" });
+      expect(f.gpt.status().connected).toBe(false);
+    } finally { await f.cleanup(); }
   });
 });

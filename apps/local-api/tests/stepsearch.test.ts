@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSearchClient, STEPSEARCH_PROVIDER } from "../src/search/index.js";
 import { STEPSEARCH_ENDPOINT } from "../src/search/stepsearch.js";
+import { EXA_MCP_URL } from "../src/search/upstream/exa.js";
 import { CredentialStore } from "../src/credentials.js";
 import { requestPublicHttps } from "../src/search/transport.js";
 import { createApp } from "../src/app.js";
@@ -49,6 +50,12 @@ function harness(override?: (message: Rpc, init: RequestInit) => Response | Prom
   return { store, fetcher, fetchImpl, client: createSearchClient({ credentials: store, fetchImpl }) };
 }
 beforeEach(() => publicRequest.mockReset());
+// A failed paid route may only continue to the keyless endpoint, never with the Plan Key.
+const expectKeylessFallbackOnly = () => {
+  expect(publicRequest).toHaveBeenCalledTimes(1);
+  expect(publicRequest.mock.calls[0][0]).toBe(EXA_MCP_URL);
+  expect(JSON.stringify(publicRequest.mock.calls)).not.toContain(TEST_KEY);
+};
 
 describe("StepSearch MCP protocol and evidence", () => {
   it("negotiates the real protocol/schema, sends only query/n to the fixed endpoint, and preserves citations", async () => {
@@ -135,7 +142,7 @@ describe("StepSearch MCP protocol and evidence", () => {
   ])("rejects invalid, invented or credential-reflecting evidence", async payload => {
     const h = harness(message => message.method === "tools/call" ? json(rpc(message.id, { structuredContent: payload })) : undefined);
     await expect(h.client.webSearch("test")).rejects.toMatchObject({ code: "search-invalid-response" });
-    expect(publicRequest).not.toHaveBeenCalled();
+    expectKeylessFallbackOnly();
   });
 
   it("returns a genuine empty list without inventing citations", async () => {
@@ -168,7 +175,7 @@ describe("StepSearch MCP protocol and evidence", () => {
 });
 
 describe("StepSearch isolation, limits and lifecycle", () => {
-  it.each([401, 403, 429, 302, 404, 500])("does not fall back or leak upstream errors on HTTP %s", async status => {
+  it.each([401, 403, 429, 302, 404, 500])("only falls back to keyless search and never leaks upstream errors on HTTP %s", async status => {
     const h = harness(() => new Response(`PRIVATE ${TEST_KEY}`, { status, headers: { location: "https://evil.example/" } }));
     try { await h.client.webSearch("test"); expect.fail("expected failure"); }
     catch (error) {
@@ -176,7 +183,7 @@ describe("StepSearch isolation, limits and lifecycle", () => {
       expect(String(error)).not.toMatch(/PRIVATE|synthetic-stepsearch-test-key|evil/);
     }
     expect(h.fetcher).toHaveBeenCalledTimes(1);
-    expect(publicRequest).not.toHaveBeenCalled();
+    expectKeylessFallbackOnly();
   });
 
   it.each(["unsupported-version", "invalid-session", "missing-tools", "cursor-loop", "unaccepted-notification", "notification-body", "wrong-origin"])("rejects %s safely during protocol negotiation", async mode => {
@@ -194,7 +201,7 @@ describe("StepSearch isolation, limits and lifecycle", () => {
     });
     await expect(h.client.webSearch("test")).rejects.toMatchObject({ code: mode === "wrong-origin" ? "search-unavailable" : "search-invalid-response" });
     expect(h.fetcher.mock.calls.some(([, init]) => JSON.parse(String(init?.body)).method === "tools/call")).toBe(false);
-    expect(publicRequest).not.toHaveBeenCalled();
+    expectKeylessFallbackOnly();
   });
 
   it.each([
@@ -205,7 +212,7 @@ describe("StepSearch isolation, limits and lifecycle", () => {
   ])("rejects invalid/error RPC envelopes without reflecting body", async body => {
     const h = harness(message => message.method === "tools/call" ? json(body(message.id!)) : undefined);
     await expect(h.client.webSearch("test")).rejects.toMatchObject({ code: "search-invalid-response" });
-    expect(publicRequest).not.toHaveBeenCalled();
+    expectKeylessFallbackOnly();
   });
 
   it.each(["declared", "streamed", "unsupported-type", "malformed-json", "truncated-sse", "bad-utf8"])("bounds and cancels %s bodies", async mode => {

@@ -4,7 +4,7 @@ import { runIntent } from "../src/intent/pipeline.js";
 import { createApp } from "../src/app.js";
 import { SEARCH_PROVIDER, SearchError, type SearchEvidence } from "../src/search/index.js";
 import { authed, emptyContext, testConfig } from "./helpers.js";
-import { searchQuery } from "../src/intent/search.js";
+import { offlineSearchQuery, searchQuery } from "../src/intent/search.js";
 
 const rows: SearchEvidence[] = ["React Flow", "tldraw", "Excalidraw"].map((title, index) => ({
   title, url: `https://example.com/project/${index}`, snippet: `${title} 的项目文档摘录。这里只是搜索摘要。`,
@@ -25,6 +25,37 @@ describe("explicit searches create evidence-backed cards without a model key", (
     expect(cards!.map(c => c.sources[0]!.url)).toEqual(rows.map(r => r.url));
     expect(cards!.every(c => c.sources[0]?.readFullPage === false)).toBe(true);
     expect(cards![0]!.displayProps).toMatchObject({ summary: "React Flow 的项目文档摘录。" });
+  });
+  it("says which route answered when the selected model's search was unavailable", async () => {
+    const planner = { provider: "gpt" as const, connected: false, isCurrent: () => true,
+      generate: async () => { throw new Error("must not call model"); } };
+    const fallback = await runIntent({ text: "搜索开源画布库", canvasContext: emptyContext() }, {
+      credentials: new CredentialStore(), stepfun: { baseUrl: "https://unit.test" }, planner,
+      search: { webSearch: async () => rows },
+    });
+    expect(fallback.envelope?.spokenText).toBe("GPT 搜索不可用，已改用公共搜索，整理了 3 条结果");
+    const keyless = await runIntent({ text: "搜索开源画布库", canvasContext: emptyContext() }, {
+      credentials: new CredentialStore(), stepfun: { baseUrl: "https://unit.test" },
+      search: { webSearch: async () => rows },
+    });
+    expect(keyless.envelope?.spokenText).toBe("已整理 3 条结果");
+  });
+  it("without any model, a plainly informational question still searches; canvas commands do not", async () => {
+    expect(offlineSearchQuery("最近有什么AI新闻？")).toBe("最近有什么AI新闻");
+    expect(offlineSearchQuery("请问上海迪士尼门票多少钱")).toBe("上海迪士尼门票多少钱");
+    expect(offlineSearchQuery("React Flow 是什么")).toBe("React Flow 是什么");
+    for (const text of ["帮我梳理这段项目思路", "把最新的便笺放大", "删除最近的待办", "最新消息然后提醒我开会", "好的"]) {
+      expect(offlineSearchQuery(text), text).toBeNull();
+    }
+    const calls: string[] = [];
+    const deps = { credentials: new CredentialStore(), stepfun: { baseUrl: "https://unit.test", fetchImpl: async () => { throw new Error("must not call model"); } },
+      search: { webSearch: async (query: string) => { calls.push(query); return rows; } } };
+    const result = await runIntent({ text: "最近有什么AI新闻？", canvasContext: emptyContext() }, deps);
+    expect(result).toMatchObject({ kind: "envelope", usedProvider: "search" });
+    expect(calls).toEqual(["最近有什么AI新闻"]);
+    const command = await runIntent({ text: "帮我梳理这段项目思路", canvasContext: emptyContext() }, deps);
+    expect(command).toMatchObject({ kind: "unknown", usedProvider: "rules-offline" });
+    expect(calls).toHaveLength(1);
   });
   it("keeps instructions embedded in a result as text data, never as actions", async () => {
     const result = await runIntent({ text: "搜索资料", canvasContext: emptyContext() }, {
