@@ -5,6 +5,7 @@ import {
 import type { ChartCard } from "./dataCardTypes";
 import { StyledDataTable } from "./StyledDataTable";
 import { renderVivicSpec } from "./vivicGUILibrary";
+import { CARD_INNER_HEIGHT, CARD_METRICS } from "./metrics";
 
 type ChartProps = ChartCard["displayProps"];
 
@@ -28,7 +29,7 @@ const fallbackReason = ({ chartKind, points }: ChartProps): string | undefined =
 export const ChartCardView = ({ card }: { card: ChartCard }) => {
   const { chartKind, points, xLabel, yLabel } = card.displayProps;
   const fallback = fallbackReason(card.displayProps);
-  const height = Math.max(144, Math.min(640, card.layout.height - 32));
+  const height = Math.max(144, Math.min(640, card.layout.height - CARD_INNER_HEIGHT));
 
   if (fallback) return <div data-vivic-chart-fallback={fallback}>
     {points.length ? <StyledDataTable
@@ -79,7 +80,7 @@ export const ChartCardView = ({ card }: { card: ChartCard }) => {
       height={height}
       minWidth={1}
       minHeight={144}
-      initialDimension={{ width: Math.max(1, card.layout.width - 38), height }}
+      initialDimension={{ width: Math.max(1, card.layout.width - CARD_METRICS.paddingX * 2 - 2), height }}
     >
       {chartKind === "pie" ? <PieChart margin={{ top: 16, right: 24, bottom: 16, left: 24 }} accessibilityLayer>
         <Pie

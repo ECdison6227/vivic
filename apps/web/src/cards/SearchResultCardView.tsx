@@ -1,10 +1,11 @@
 import type { SearchResultCard } from "@/contracts";
 import { renderVivicSpec } from "./vivicGUILibrary";
+import { CARD_INNER_HEIGHT } from "./metrics";
 
 /** Minimal search result: title + one-sentence summary + source label. */
 export const SearchResultCardView = ({ card }: { card: SearchResultCard }) => {
   const source = card.sources[0];
-  return <div className="flex min-w-0 flex-col" style={{ height: Math.max(80, card.layout.height - 32) }}>
+  return <div className="vivic-search-content flex min-w-0 flex-col" style={{ height: Math.max(80, card.layout.height - CARD_INNER_HEIGHT) }}>
   <div className="min-h-0 flex-1 overflow-hidden">
   {renderVivicSpec({
     _type: "Col",

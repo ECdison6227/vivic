@@ -1382,16 +1382,25 @@
   cursor: default;
 }
 
-/* Minimal card shell: solid surface, one radius, one shadow, token colors. */
+/* Shared reading metrics mirror cards/metrics.ts for placement estimates. */
+:root {
+  --vivic-body-size: 16px;
+  --vivic-body-leading: 28px;
+  --vivic-card-padding-x: 22px;
+  --vivic-card-padding-y: 20px;
+  --vivic-reading-muted: color-mix(in oklab, var(--foreground) 70%, var(--background));
+}
+.dark { --vivic-reading-muted: color-mix(in oklab, var(--foreground) 70%, var(--background)); }
+/* A quiet translucent fill; no per-card backdrop blur or extra renderer. */
 .vivic-card {
   border-radius: var(--radius-xl);
   border: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
-  background: color-mix(in oklab, var(--card) 96%, transparent);
+  background: color-mix(in oklab, var(--card) 90%, transparent);
   color: var(--card-foreground);
   box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.06),
-    0 12px 32px -16px rgb(0 0 0 / 0.18);
-  padding: 1rem 1.125rem;
+    0 1px 2px rgb(0 0 0 / 0.035),
+    0 10px 30px -18px rgb(0 0 0 / 0.15);
+  padding: var(--vivic-card-padding-y) var(--vivic-card-padding-x);
   transition:
     transform 0.26s cubic-bezier(0.25, 0.7, 0.25, 1),
     opacity 0.22s ease,
@@ -1484,3 +1493,25 @@
 .vivic-subcard-scroll { overflow: auto; max-height: min(510px, calc(var(--radix-popover-content-available-height) - 120px)); overscroll-behavior: contain; }
 [data-vivic-subcard-slot] { display: inline-flex; vertical-align: middle; margin-left: 8px; }
 .vivic-reminder-row .vivic-subcard-anchor [data-aui="text"] { font-size: 1.125rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* Reading roles are scoped to the existing registry, not its form controls. */
+.vivic-note-content { font-size: var(--vivic-body-size); line-height: var(--vivic-body-leading); }
+.vivic-note-line { min-height: var(--vivic-body-leading); }
+.vivic-note-content [data-aui="text"],
+.vivic-search-content [data-aui="text"],
+.vivic-card [data-aui="checkbox"] {
+  font-size: var(--vivic-body-size);
+  line-height: var(--vivic-body-leading);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.vivic-search-content [data-aui="col"] > [data-aui="text"]:first-child {
+  font-weight: 600;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.vivic-search-content [data-aui="text"][data-aui-color="secondary"],
+.vivic-note-content [data-aui="text"][data-aui-color="secondary"],
+.vivic-search-content [data-aui="caption"] { color: var(--vivic-reading-muted); }
+.vivic-search-content [data-aui="caption"] { font-size: 13px; line-height: 1.55; }
+.vivic-card [data-aui="table"] { font-variant-numeric: tabular-nums; }

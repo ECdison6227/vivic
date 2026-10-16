@@ -25,8 +25,8 @@ export const BackgroundLayer = ({ theme }: { theme: "light" | "dark" }) => {
     style={{ background: theme === "dark"
       ? "radial-gradient(circle at 50% 40%, #221c48 0%, #0a0d1c 75%)"
       : "radial-gradient(circle at 50% 40%, #f3ecff 0%, #eef3fd 75%)" }}>
-    <Grainient colors={[...preset.colors]} lightMode={preset.lightMode} speed={preferences.reducedMotion ? 0 : 0.5}
-      grainAnimated={!preferences.reducedMotion} flow={0.55} scale={1} softness={1} silk={0.3} grainAmount={0.07}
+    <Grainient colors={[...preset.colors]} lightMode={preset.lightMode} speed={preferences.reducedMotion ? 0 : 0.35}
+      grainAnimated={!preferences.reducedMotion} flow={0.45} scale={1} softness={1} silk={0.3} grainAmount={0.045}
       interactive={false} clickSwirl={false} intro={false} dpr={1.75} />
   </div>;
 };

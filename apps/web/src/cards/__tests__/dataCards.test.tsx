@@ -111,7 +111,7 @@ describe("data card renderers", () => {
     expect([...host.querySelectorAll("tbody tr")].map(row => row.children.length)).toEqual([2, 2, 2]);
     expect([...host.querySelectorAll("tbody td")].map(cell => cell.textContent)).toEqual(["<script>TEST</script>", "—", "—", "—", "false", "0"]);
     expect(host.querySelector("script")).toBeNull();
-    expect((host.querySelector("[data-vivic-data-table]") as HTMLElement).style.maxHeight).toBe("208px");
+    expect((host.querySelector("[data-vivic-data-table]") as HTMLElement).style.maxHeight).toBe("198px");
   });
 
   it.each(["line", "bar", "pie"] as const)("renders real %s marks and survives initial, zero, narrow, and recovered widths without size warnings", async kind => {

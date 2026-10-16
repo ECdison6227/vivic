@@ -1,13 +1,14 @@
 import type { NoteCard } from "./dataCardTypes";
 import { Fragment } from "react";
+import { CARD_INNER_HEIGHT } from "./metrics";
 import { renderVivicSpec } from "./vivicGUILibrary";
 import { SubcardAnchor } from "./SubcardAnchor";
 
 /** Density changes only with the stored variant; Display adds no expand button. */
 export const NoteCardView = ({ card }: { card: NoteCard }) => <div
-  className="min-w-0 whitespace-pre-wrap break-words"
+  className="vivic-note-content min-w-0 whitespace-pre-wrap break-words"
   style={card.variant === "expanded" ? undefined : {
-    maxHeight: Math.max(24, Math.min(card.layout.height - 32, card.variant === "minimal" ? 72 : 144)),
+    maxHeight: Math.max(28, Math.min(card.layout.height - CARD_INNER_HEIGHT, card.variant === "minimal" ? 84 : 168)),
     overflow: "hidden",
   }}
   data-vivic-note-variant={card.variant}

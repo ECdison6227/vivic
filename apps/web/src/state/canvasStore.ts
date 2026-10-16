@@ -1,4 +1,5 @@
 import { presentCards, groupedReminder, completedCountdown } from "@/canvas/reminderPresentation";
+import { CARD_METRICS, CARD_INNER_HEIGHT } from "@/cards/metrics";
 import { useSyncExternalStore } from "react";
 import {
   ActionEnvelopeSchema,
@@ -99,19 +100,28 @@ const initialState = (): VivicState => ({
 
 const cardHeight = ({ record }: CardState): number => {
   const width = Math.max(80, record.layout.width);
-  const chars = Math.max(1, Math.floor((width - 64) / 14));
+  if (record.type === "CountdownCard") {
+    const text = record.sourceData.reminderText;
+    const chars = Math.max(1, Math.floor((width - 168) / 18));
+    return Math.max(record.layout.height, text
+      ? CARD_INNER_HEIGHT + Math.max(56, Math.ceil(text.length / chars) * 27 + 20)
+      : CARD_INNER_HEIGHT + Math.ceil(44 * 1.15) + 8);
+  }
+  // Reserve room for the existing row expansion affordance, even before a
+  // subcard is added. CSS body size/line-height/padding use these same values.
+  const chars = Math.max(1, Math.floor((width - 84) / CARD_METRICS.bodySize));
   if (record.type === "TodoCard") {
-    // Todo rows inherit the 16px body font, unlike the 14px Note text.
-    const todoChars = Math.max(1, Math.floor((width - 64) / 16));
-    return Math.max(record.layout.height, 48 + record.displayProps.items.slice(0, 5).reduce((sum, item) =>
-      sum + 32 + Math.max(0, Math.ceil(item.text.length / todoChars) - 1) * 24, 0));
+    const todoChars = Math.max(1, Math.floor((width - 112) / CARD_METRICS.bodySize));
+    const items = record.displayProps.items.slice(0, 5);
+    return Math.max(record.layout.height, CARD_INNER_HEIGHT + Math.max(0, items.length - 1) * CARD_METRICS.rowGap + items.reduce((sum, item) =>
+      sum + Math.max(1, Math.ceil(item.text.length / todoChars)) * CARD_METRICS.lineHeight, 0));
   }
   if (record.type === "NoteCard" && record.variant === "expanded") {
     const lines = [record.displayProps.text ?? "", ...(record.displayProps.bullets ?? [])]
       .reduce((sum, text) => sum + text.split("\n").reduce((count, line) => count + Math.max(1, Math.ceil(line.length / chars)), 0), 0);
-    return Math.max(record.layout.height, 40 + lines * 24);
+    return Math.max(record.layout.height, CARD_INNER_HEIGHT + lines * CARD_METRICS.lineHeight + (record.displayProps.bullets?.length ?? 0) * CARD_METRICS.rowGap);
   }
-  return Math.max(record.layout.height, record.type === "ChartCard" ? 176 : record.type === "SearchResultCard" ? 112 : 96);
+  return Math.max(record.layout.height, record.type === "ChartCard" ? 144 + CARD_INNER_HEIGHT : record.type === "SearchResultCard" ? 80 + CARD_INNER_HEIGHT : 56 + CARD_INNER_HEIGHT);
 };
 /** Persisted layout bounds, using the same conservative content heights as placement. */
 export const hasUnpinnedOverlap = (cards: CardState[]): boolean => presentCards(cards).some(({ entry: left }, index, visible) => !left.exitingRequestId && visible.slice(index + 1).some(({ entry: right }) => {
