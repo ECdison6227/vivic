@@ -2,18 +2,34 @@ import type { CountdownCard } from "@/contracts";
 import type { CardState } from "@/state/canvasStore";
 import { CARD_INNER_HEIGHT } from "@/cards/metrics";
 export const completedCountdown = (entry: CardState) => entry.record.type === "CountdownCard" && Boolean(entry.record.sourceData.notifiedAt) && !entry.record.sourceData.schedule;
-export const groupedReminder = (entry: CardState) => entry.record.type === "CountdownCard" && Boolean(entry.record.sourceData.reminderText) && !entry.record.layout.pinned && !entry.exitingRequestId && !completedCountdown(entry);
+export const REMINDER_HORIZON_MS = 60 * 60 * 1000;
+export const reminderGroupKey = (entry: CardState) => entry.record.type === "CountdownCard" && (entry.record.sourceData.schedule || entry.record.sourceData.timeZone || entry.record.sourceData.condition) ? "planned" : "relative";
+export function reminderVisible(entry: CardState, now = Date.now()): boolean {
+  if (completedCountdown(entry)) return false;
+  if (entry.record.type !== "CountdownCard" || !entry.record.sourceData.reminderText || entry.record.layout.pinned) return true;
+  const source = entry.record.sourceData;
+  if (source.condition && !source.conditionMetAt) return false;
+  return Date.parse(source.targetAt) - (source.pausedAt ? Date.parse(source.pausedAt) : now) <= REMINDER_HORIZON_MS;
+}
+export const groupedReminder = (entry: CardState) => entry.record.type === "CountdownCard" && Boolean(entry.record.sourceData.reminderText) && !entry.record.layout.pinned && !entry.exitingRequestId && reminderVisible(entry);
 export interface PresentedCard { entry: CardState; reminders?: CountdownCard[]; memberIds: string[] }
 /** Derived view only: preserve every timer's ID, task, pause state and delivery.
  * Pinned cards remain separate; completed timers stay available to Control and
  * conditions but occupy no display/layout space. */
-export function presentCards(cards: CardState[]): PresentedCard[] {
-  const group = cards.filter(groupedReminder);
-  const anchor = group[0];
+export function presentCards(cards: CardState[], options: { focusId?: string; now?: number } = {}): PresentedCard[] {
+  const now = options.now ?? Date.now();
+  const visible = (entry: CardState) => reminderVisible(entry, now) || entry.record.id === options.focusId && !completedCountdown(entry);
+  const grouped = (entry: CardState) => entry.record.type === "CountdownCard" && Boolean(entry.record.sourceData.reminderText) && !entry.record.layout.pinned && !entry.exitingRequestId && visible(entry);
+  const groups = new Map<string, CardState[]>();
+  for (const card of cards.filter(grouped)) {
+    const key = reminderGroupKey(card);
+    groups.set(key, [...(groups.get(key) ?? []), card]);
+  }
   return cards.flatMap(entry => {
-    if (completedCountdown(entry) && !entry.exitingRequestId) return [];
-    if (!groupedReminder(entry)) return [{ entry, memberIds: [entry.record.id] }];
-    if (entry !== anchor) return [];
+    if (!visible(entry) && !entry.exitingRequestId) return [];
+    if (!grouped(entry)) return [{ entry, memberIds: [entry.record.id] }];
+    const group = groups.get(reminderGroupKey(entry))!;
+    if (entry !== group[0]) return [];
     const reminders = group.map(item => item.record as CountdownCard);
     const width = Math.max(360, entry.record.layout.width);
     const chars = Math.max(1, Math.floor((width - 168) / 18));

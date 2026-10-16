@@ -34,6 +34,8 @@ import { parseSyncMessage, DisplayPreferencesSchema, DEFAULT_DISPLAY_PREFERENCES
   type DisplayPreferences, type CanvasInteraction, type SyncMessage } from "./protocol";
 import { isDue, reminderText, sameDelivery, conditionSatisfied, deliveredNoticeCurrent, ReminderInboxSchema, type ReminderNotice, type ReminderSummary } from "@/reminders/reminders";
 import { nextReminderOccurrence, type CountdownCard } from "@vivic/contracts";
+import { presentCards } from "@/canvas/reminderPresentation";
+import { playReminderSound } from "@/reminders/sound";
 
 /**
  * CONTROL_OWNER host: the sole writer. Dispatches validated ActionEnvelopes
@@ -787,10 +789,28 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     }
   };
 
+  let presentationCanvas: string | null = null;
+  let presentationIds = new Set<string>();
+  let presentationKnownIds = new Set<string>();
   const runReminderCheck = async () => {
     try {
       await persistence;
       if (!writable()) return;
+      // A long reminder enters the near-term canvas when it crosses one hour.
+      // Refresh only on membership changes, and resolve collisions as owner.
+      const state = store.getState();
+      const visible = new Set(presentCards(state.cards, { focusId: state.focus?.cardId, now: now() }).flatMap(item => item.memberIds));
+      const entering = presentationCanvas === activeCanvasId && [...visible].some(id => presentationKnownIds.has(id) && !presentationIds.has(id));
+      presentationCanvas = activeCanvasId; presentationIds = visible;
+      presentationKnownIds = new Set(state.cards.map(c => c.record.id));
+      if (entering && activeCanvasId) {
+        const id = activeCanvasId, meta = records.get(id);
+        store.loadState({ ...state, cards: hasUnpinnedOverlap(state.cards) ? relayout(state.cards) : [...state.cards] });
+        if (meta) records.set(id, { ...meta, version: meta.version + 1 });
+        await saveActiveNow();
+        if (!writable()) return;
+        if (activeCanvasId === id) postSnapshot(id);
+      }
       for (const item of getReminders()) {
         const record = records.get(item.canvasId);
         const cards = item.canvasId === activeCanvasId ? store.getState().cards.filter(c => !c.exitingRequestId).map(c => c.record)
@@ -830,7 +850,10 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
         reminderNotices = reminderNotices.filter(n => !stale.has(n.id));
         await deps.db.setMeta("reminderInbox", JSON.stringify(reminderNotices));
       }
-      if (writable()) reportable.forEach(notifyReminder);
+      if (writable()) {
+        reportable.forEach(notifyReminder);
+        if (reportable.length) playReminderSound();
+      }
       if (reportable.length && activeCanvasId && owner.mode() === "owner") {
         const text = reportable.length === 1 ? `提醒：${reportable[0]!.text}`
           : `${reportable.length}项提醒到时间了：${reportable.map(n => n.text).join("；")}`;

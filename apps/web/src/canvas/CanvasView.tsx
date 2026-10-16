@@ -94,7 +94,7 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
 
   const nodes = useMemo<Array<Node<VivicNodeData>>>(
     () =>
-      presentCards(cards).map(({ entry, reminders, memberIds }) => {
+      presentCards(cards, { focusId: focus?.cardId }).map(({ entry, reminders, memberIds }) => {
         const override = dragOverrides[entry.record.id];
         return {
           id: entry.record.id,
@@ -212,7 +212,7 @@ const CanvasInner = ({ resolvedTheme }: { resolvedTheme?: "light" | "dark" }) =>
   // Never touches card content or variant.
   useEffect(() => {
     if (focus) {
-      const entry = presentCards(canvasStore.getState().cards).find(group => group.memberIds.includes(focus.cardId))?.entry;
+      const entry = presentCards(canvasStore.getState().cards, { focusId: focus.cardId }).find(group => group.memberIds.includes(focus.cardId))?.entry;
       if (entry) {
         const { x, y, width, height } = entry.record.layout;
         const zoom = Math.min(

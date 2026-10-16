@@ -11,7 +11,8 @@ export const SubtitleLayer = () => {
   const preferences = useDisplayPreferences();
   const subtitle = useVivicState((s) => s.subtitle);
   const activity = useVivicState((s) => s.activity);
-  const line = activity?.phase === "speaking" ? activity : subtitle?.priority === "reminder" ? subtitle : activity ?? subtitle;
+  const reminderAlert = subtitle?.priority === "reminder";
+  const line = reminderAlert ? subtitle : activity ?? subtitle;
   const showingActivity = Boolean(activity && line === activity);
   const lineId = line && ("requestId" in line ? line.requestId : line.id);
   const timing = showingActivity && activity?.phase === "speaking" ? activity.speech : undefined;
@@ -43,7 +44,7 @@ export const SubtitleLayer = () => {
       aria-live="polite"
     >
       <AnimatePresence mode="wait">
-        {preferences.subtitles && line && (
+        {(preferences.subtitles || reminderAlert) && line && (
           <motion.p
             key={lineId}
             data-vivic-subtitle={lineId}

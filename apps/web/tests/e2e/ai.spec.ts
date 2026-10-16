@@ -91,7 +91,7 @@ test("AI section shows honest 未连接 when the backend has no key", async ({
   await page.goto("/control");
   await page.waitForSelector('[data-vivic-control="ready"]');
   await expect(page.locator("[data-vivic-ai-badge]")).toHaveText("未连接");
-  await expect(page.locator("[data-vivic-intent-mode]")).toContainText("决策服务");
+  await expect(page.locator("[data-vivic-intent-mode]")).toHaveText("模型未连接 · 可用本地指令");
 
   // Commands still route through the backend's local rules (usedProvider=rules).
   await sendCommand(page, "十分钟倒计时");

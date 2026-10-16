@@ -1,17 +1,16 @@
-import { presentCards } from "@/canvas/reminderPresentation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import SiriOrb from "@/components/smoothui/siri-orb";
 import { deriveOrb } from "@/motion/motionDirector";
-import { canvasStore, useVivicState, useDisplayPreferences } from "@/state/canvasStore";
-import { anchorCenter, cardToScreenRect, chooseOrbAnchor } from "./orbAnchor";
+import { useVivicState, useDisplayPreferences } from "@/state/canvasStore";
+import { anchorCenter } from "./orbAnchor";
 
 /**
  * The only orb surface. Standby: large breathing orb on pure black.
  * Awakening: brief scale/bloom (~100ms rise) while the reveal mask expands,
  * then it dissolves into the background. Workspace: no resident orb — a small
- * feedback orb returns only while a speaking/thinking event is live, anchored
- * to the first screen spot that does not overlap any card (FIX A).
+ * feedback orb returns only while a speaking/thinking event is live. Its
+ * top-centre screen anchor stays fixed while cards or the camera move.
  */
 export const OrbLayer = () => {
   const stage = useVivicState((s) => s.stage);
@@ -19,16 +18,6 @@ export const OrbLayer = () => {
   const activity = useVivicState((s) => s.activity);
   const listening = activity?.phase === "listening";
   const thinking = Boolean(activity && activity.phase !== "speaking" && !listening);
-  const viewport = useVivicState((s) => s.viewport);
-  // Re-evaluate the anchor when any card rect changes (relayout/drag/commit).
-  const layoutSig = useVivicState((s) =>
-    s.cards
-      .map(
-        (c) =>
-          `${c.record.id}:${c.record.layout.x},${c.record.layout.y},${c.record.layout.width},${c.record.layout.height},${c.exitingRequestId ?? ""}`,
-      )
-      .join("|"),
-  );
   const preferences = useDisplayPreferences();
   const reduceMotion = useReducedMotion() || preferences.reducedMotion;
 
@@ -51,20 +40,8 @@ export const OrbLayer = () => {
   const awakening = stage === "AWAKENING";
   const feedback = directive.feedback;
 
-  const feedbackSpot = useMemo(() => {
-    if (!feedback || screen.width === 0) return null;
-    const cards = presentCards(canvasStore.getState().cards).map(item => item.entry)
-      .filter(c => !c.exitingRequestId).map(c => cardToScreenRect(c.record.layout, viewport));
-    const { anchor } = chooseOrbAnchor({
-      screenWidth: screen.width,
-      screenHeight: screen.height,
-      orbSize: feedbackSize,
-      cards,
-    });
-    const center = anchorCenter(anchor, screen.width, screen.height, feedbackSize);
-    return { anchor, x: center.x - feedbackSize / 2, y: center.y - feedbackSize / 2 };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedback, feedbackSize, screen, viewport, layoutSig]);
+  const center = anchorCenter("top-center", screen.width, screen.height, feedbackSize);
+  const feedbackSpot = { anchor: "top-center", x: center.x - feedbackSize / 2, y: center.y - feedbackSize / 2 };
 
   return (
     <div

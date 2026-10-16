@@ -39,6 +39,9 @@ test("display drag persists through refresh; owner pin prevents movement and sur
     const pinned = await layout(display, "drag-a"); await drag(display, "drag-a");
     expect(await layout(control, "drag-a")).toEqual(pinned);
     await controlDispatch(control, "delete-drag", canvasId, [{ type: "card.delete", targetId: "drag-a" }]);
+    // Observe the deletion before checking undo; the old card position can
+    // otherwise satisfy the undo assertion before either patch has arrived.
+    await expect(display.locator('[data-card-id="drag-a"]')).toHaveCount(0);
     await control.evaluate(async () => {
       const modulePath = "/src/sync/browserRuntime.ts";
       const { getControlHost } = await import(/* @vite-ignore */ modulePath);

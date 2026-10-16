@@ -3,7 +3,7 @@ import { presentCards } from "../reminderPresentation";
 import { createCanvasStore, hasUnpinnedOverlap } from "@/state/canvasStore";
 import { testCards } from "@/cards/__tests__/fixtures";
 import type { CountdownCard } from "@/contracts";
-const timer = (id: string, text?: string): CountdownCard => ({ ...testCards.CountdownCard, id, layout: { ...testCards.CountdownCard.layout, width: 264, height: 96 }, sourceData: { targetAt: "2099-10-15T08:00:00.000Z", ...(text ? { reminderText: text } : {}) } });
+const timer = (id: string, text?: string): CountdownCard => ({ ...testCards.CountdownCard, id, layout: { ...testCards.CountdownCard.layout, width: 264, height: 96 }, sourceData: { targetAt: new Date(Date.now() + 600000).toISOString(), ...(text ? { reminderText: text } : {}) } });
 it("presents named reminders as one list while keeping plain timers and pinned cards independent", () => {
   const a = timer("a", "喝水"), b = timer("b", "休息"), plain = timer("plain");
   const view = presentCards([a, b, plain].map(record => ({ record })));
@@ -28,4 +28,37 @@ it("reserves group height around pinned obstacles and moves the group through th
   const cards = store.getState().cards;
   expect(cards.find(c => c.record.id === "b")!.record.layout.x).toBe(900);
   expect(cards.find(c => c.record.id === pinned.id)!.record.layout).toEqual(pinned.layout);
+});
+it("separates plans from immediate reminders and keeps far-future and unmet conditions in Control", () => {
+  const soon = timer("soon", "喝水");
+  const recurring = { ...timer("repeat", "休息"), sourceData: { ...soon.sourceData, reminderText: "休息", schedule: { kind: "interval" as const, everySeconds: 600 } } };
+  const far = { ...timer("far", "明天开会"), sourceData: { targetAt: new Date(Date.now() + 86400000).toISOString(), reminderText: "明天开会", timeZone: "Asia/Shanghai" } };
+  const waiting = { ...timer("waiting", "检查"), sourceData: { ...soon.sourceData, condition: { kind: "todo.completed" as const, cardId: "todo", delaySeconds: 5 } } };
+  const cards = [soon, recurring, far, waiting].map(record => ({ record }));
+  expect(presentCards(cards).map(group => group.memberIds)).toEqual([["soon"], ["repeat"]]);
+  expect(presentCards(cards, { now: Date.now() + 86400000 - 3600000 }).flatMap(group => group.memberIds)).toContain("far");
+  expect(presentCards(cards, { focusId: "far" }).flatMap(group => group.memberIds)).toContain("far");
+  expect(cards).toHaveLength(4);
+});
+it("does not move pinned cards while bringing a hidden reminder into focus", () => {
+  const store = createCanvasStore();
+  const pinned = { ...testCards.TodoCard, layout: { ...testCards.TodoCard.layout, pinned: true } };
+  const far = { ...timer("far", "明天开会"), sourceData: { targetAt: new Date(Date.now() + 86400000).toISOString(), reminderText: "明天开会" } };
+  store.dispatch({ schemaVersion: "0.6", canvasId: "TEST", requestId: "setup", actions: [pinned, far].map(card => ({ type: "card.create", card })) });
+  store.dispatch({ schemaVersion: "0.6", canvasId: "TEST", requestId: "focus", actions: [{ type: "card.focus", targetId: "far" }] });
+  expect(store.getState().cards.find(c => c.record.id === pinned.id)!.record.layout).toEqual(pinned.layout);
+  const shown = presentCards(store.getState().cards, { focusId: "far" });
+  expect(shown).toHaveLength(2);
+  const [a, b] = shown.map(c => c.entry.record.layout);
+  expect(a!.x + a!.width <= b!.x || b!.x + b!.width <= a!.x || a!.y + a!.height <= b!.y || b!.y + b!.height <= a!.y).toBe(true);
+});
+it("moving an immediate reminder never drags the separate recurring plan along", () => {
+  const store = createCanvasStore();
+  const relative = timer("water", "喝水"), planned = timer("repeat", "休息");
+  planned.sourceData.schedule = { kind: "interval", everySeconds: 600 };
+  store.dispatch({ schemaVersion: "0.6", canvasId: "TEST", requestId: "groups", actions: [relative, planned].map(card => ({ type: "card.create", card })) });
+  const before = store.getState().cards.find(c => c.record.id === planned.id)!.record.layout;
+  const from = store.getState().cards.find(c => c.record.id === relative.id)!.record.layout;
+  store.interact("move-relative", { kind: "card.move", cardId: relative.id, from, x: 900, y: 900 });
+  expect(store.getState().cards.find(c => c.record.id === planned.id)!.record.layout).toEqual(before);
 });

@@ -3,11 +3,10 @@ import path from "node:path";
 import { EVIDENCE, fire } from "./helpers";
 
 /**
- * Phase 2a.1 (FIX A): the transient feedback orb must not overlap cards.
- * One card is deliberately parked over the historical fixed orb spot
- * (bottom-center ~21vh); the orb must anchor somewhere intersection-free.
+ * User feedback 2026-10-16: keep transient feedback at a fixed screen anchor,
+ * independently of card positions and focus/camera movement.
  */
-test("P2a.1: feedback orb avoids card rects", async ({ page }) => {
+test("feedback orb keeps its top-centre position when cards and camera move", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await page.goto("/display");
   await page.waitForSelector(".siri-orb");
@@ -33,8 +32,7 @@ test("P2a.1: feedback orb avoids card rects", async ({ page }) => {
   await fire(page, "fit", [{ type: "canvas.fit" }]);
   await page.waitForTimeout(900); // camera settles, store.viewport authoritative
 
-  // Park the card over the historical orb spot: (w/2, h - 21vh).
-  const spot = { x: 400, y: 600 - 126 };
+  const spot = { x: 400, y: 48 };
   const vp = await page.evaluate(
     () =>
       (window as unknown as {
@@ -64,18 +62,16 @@ test("P2a.1: feedback orb avoids card rects", async ({ page }) => {
 
   const orbBox = await orb.boundingBox();
   expect(orbBox).not.toBeNull();
-  const cardBox = await page.locator('[data-card-id="p2a1-todo"]').boundingBox();
-  expect(cardBox).not.toBeNull();
-  const overlap =
-    orbBox!.x < cardBox!.x + cardBox!.width &&
-    orbBox!.x + orbBox!.width > cardBox!.x &&
-    orbBox!.y < cardBox!.y + cardBox!.height &&
-    orbBox!.y + orbBox!.height > cardBox!.y;
-  expect(overlap).toBe(false);
+  await expect(orb).toHaveAttribute("data-vivic-orb-anchor", "top-center");
+  expect(orbBox!.x + orbBox!.width / 2).toBeCloseTo(400, 0);
+  expect(orbBox!.y).toBeCloseTo(16, 0);
+  await fire(page, "move-camera", [{ type: "card.focus", targetId: "p2a1-todo" }]);
+  await expect.poll(async () => (await orb.boundingBox())?.x).toBeCloseTo(orbBox!.x, 0);
+  await expect.poll(async () => (await orb.boundingBox())?.y).toBeCloseTo(orbBox!.y, 0);
   // And the orb stays fully on screen.
   expect(orbBox!.x).toBeGreaterThanOrEqual(0);
   expect(orbBox!.y).toBeGreaterThanOrEqual(0);
   expect(orbBox!.x + orbBox!.width).toBeLessThanOrEqual(800);
   expect(orbBox!.y + orbBox!.height).toBeLessThanOrEqual(600);
-  await page.screenshot({ path: path.join(EVIDENCE, "../phase2a/orb-avoids-cards.png") });
+  await page.screenshot({ path: path.join(EVIDENCE, "../phase2a/orb-fixed-anchor.png") });
 });

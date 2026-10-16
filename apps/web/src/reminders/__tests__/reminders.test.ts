@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CountdownCard } from "@/contracts";
 import { createMemoryDB } from "@/persistence/db";
 import { createCanvasStore } from "@/state/canvasStore";
@@ -7,6 +7,9 @@ import { createControlHost, type ControlHost } from "@/sync/controlHost";
 import { createMemoryLockProvider } from "@/sync/testing";
 import { createDisplayClient } from "@/sync/displayClient";
 import { isDue, remainingSeconds } from "../reminders";
+import { presentCards } from "@/canvas/reminderPresentation";
+import { hasUnpinnedOverlap } from "@/state/canvasStore";
+import { testCards } from "@/cards/__tests__/fixtures";
 
 const startAt = Date.parse("2026-10-15T10:00:00.000Z");
 const hosts: ControlHost[] = [];
@@ -33,6 +36,21 @@ const setup = async () => {
 };
 
 describe("reminder delivery owned by the controller", () => {
+  it("brings a distant reminder into the one-hour window without moving a pinned obstacle", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(startAt);
+    try {
+      const { host, store, send, advance } = await setup();
+      const pinned = { ...testCards.TodoCard, layout: { ...testCards.TodoCard.layout, pinned: true } };
+      send([{ type: "card.create", card: pinned }, { type: "card.create", card: timerCard("soon", startAt + 3601000) }]);
+      await host.checkReminders();
+      expect(presentCards(store.getState().cards)).toHaveLength(1);
+      advance(2000); vi.setSystemTime(startAt + 2000); await host.checkReminders();
+      expect(presentCards(store.getState().cards)).toHaveLength(2);
+      expect(hasUnpinnedOverlap(store.getState().cards)).toBe(false);
+      expect(store.getState().cards.find(c => c.record.id === pinned.id)!.record.layout).toEqual(pinned.layout);
+      expect(host.getSnapshot().reminderNotices).toHaveLength(0);
+    } finally { vi.useRealTimers(); }
+  });
   it("three due timers become distinct notices exactly once and keep minimal props empty", async () => {
     const { host, store, send, advance } = await setup();
     send(["喝水", "休息", "开会"].map((text, index) => ({ type: "card.create", card: timerCard(`r${index}`, startAt + 5000, text) })));

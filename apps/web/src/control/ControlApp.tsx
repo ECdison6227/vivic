@@ -26,6 +26,8 @@ import { CardSubcardsSection } from "./CardSubcardsSection";
 import { QuickFind } from "./QuickFind";
 import type { Attachment } from "@/ai/attachments";
 import { startsNewInstruction } from "@vivic/contracts";
+import { focusResponseActions } from "@/commands/responseFocus";
+import { armReminderSound } from "@/reminders/sound";
 
 export const INTENT_TIMEOUT_MS = 100_000;
 
@@ -67,6 +69,11 @@ export const ControlApp = () => {
     text: string;
   } | null>(null);
   const reminderQueue = useRef<ReminderNotice[]>([]);
+  useEffect(() => {
+    const unlock = () => { if (host?.getSnapshot().ownerMode === "owner") armReminderSound(); };
+    window.addEventListener("pointerdown", unlock); window.addEventListener("keydown", unlock);
+    return () => { window.removeEventListener("pointerdown", unlock); window.removeEventListener("keydown", unlock); };
+  }, [host]);
   const announcing = useRef(false);
   const previousQuestion = useRef<{ canvasId: string; utterance: string; question: string; at: number } | null>(null);
 
@@ -264,7 +271,7 @@ export const ControlApp = () => {
         requestId: newId("cmd"),
         canvasId: activeCanvasId ?? "",
         spokenText: result.spokenText,
-        actions: result.actions,
+        actions: focusResponseActions(result.actions, canvasStore.getState()),
       });
       const message = res.ok ? result.spokenText ?? result.description : `指令未执行（${res.error}）`;
       setFeedback(message);
@@ -320,6 +327,7 @@ export const ControlApp = () => {
       if (!host) return;
       const snap = host.getSnapshot();
       if (!snap.activeCanvasId || snap.ownerMode !== "owner") return;
+      armReminderSound();
       const trimmed = text.trim();
       if (clarify && !attachments?.length) {
         const number = choiceNumber(trimmed);
@@ -337,10 +345,10 @@ export const ControlApp = () => {
       const activeCanvasId = snap.activeCanvasId;
       const previous = previousQuestion.current;
       const continuation = previous && previous.canvasId === activeCanvasId && Date.now() - previous.at < 120_000 && trimmed.length <= 80
-        && !attachments?.length && !startsNewInstruction(trimmed)
+        && !attachments?.length && !startsNewInstruction(trimmed, previous.utterance)
         ? { utterance: previous.utterance, question: previous.question } : undefined;
       previousQuestion.current = null;
-      if (!attachments?.length && /^(?:重新排布|整理布局|整理画布|排好卡片)$/.test(trimmed)) {
+      if (!attachments?.length && /^(?:请|帮我|请帮我)?\s*(?:重新排(?:布|列|版)(?:卡片)?(?:并?居中)?|整理(?:布局|画布)|排好卡片)[。！!]*$/.test(trimmed)) {
         const result = host.arrangeCanvas();
         setFeedback(result.ok ? "已重新排布，固定卡片保持原位。" : "暂时无法整理布局，请检查控制权后重试。");
         return;
@@ -411,7 +419,7 @@ export const ControlApp = () => {
           cancelShortFeedback(requestId);
           setBackendOnline(true);
           if (result.kind === "envelope" && result.envelope) {
-            const res = host.dispatch(result.envelope);
+            const res = host.dispatch({ ...result.envelope, actions: focusResponseActions(result.envelope.actions, canvasStore.getState()) });
             const message = res.ok ? result.envelope.spokenText ?? "已执行" : `指令未执行（${res.error}）`;
             setFeedback(message);
             if (!res.ok) publishFeedback(host, message);

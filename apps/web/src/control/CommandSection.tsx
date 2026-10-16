@@ -63,6 +63,7 @@ export const CommandSection = ({
   const [imageProcessing, setImageProcessing] = useState(false);
   const [imageReset, setImageReset] = useState(0);
   const [visionAvailable, setVisionAvailable] = useState(false);
+  const [modelConnection, setModelConnection] = useState<{ connected: boolean; name: string } | null>(null);
   const [wakeCancelKey, setWakeCancelKey] = useState(0);
   const voiceConfig = useSyncExternalStore(subscribeVoiceConfiguration, getVoiceConfiguration);
   const speech = useSyncExternalStore(subscribeSpeech, getSpeechSnapshot);
@@ -71,8 +72,11 @@ export const CommandSection = ({
     const clear = () => { setAttachment(null); setImageReset(value => value + 1); setWakeCancelKey(value => value + 1); };
     const refresh = async () => {
       try { const data = await getProvidersStatus(); const provider = data.providers.find(item => item.name === (data.activeProvider ?? "stepfun"));
-        if (active) setVisionAvailable(Boolean(provider?.connected && provider.capabilities.includes("vision")));
-      } catch { if (active) setVisionAvailable(false); }
+        if (active) {
+          setVisionAvailable(Boolean(provider?.connected && provider.capabilities.includes("vision")));
+          setModelConnection({ connected: Boolean(provider?.connected), name: provider?.defaultModel ?? (data.activeProvider === "gpt" ? "GPT" : "StepFun") });
+        }
+      } catch { if (active) { setVisionAvailable(false); setModelConnection(null); } }
     };
     void refresh(); const timer = setInterval(() => void refresh(), 3000);
     window.addEventListener("vivic:provider-change", clear);
@@ -110,7 +114,8 @@ export const CommandSection = ({
     backendOnline === null
       ? { text: "意图路由检查中…", cls: "bg-neutral-100 text-neutral-500" }
       : backendOnline
-        ? { text: "决策服务 · 规则优先", cls: "bg-emerald-100 text-emerald-800" }
+        ? modelConnection?.connected ? { text: `已连接 · ${modelConnection.name}`, cls: "bg-emerald-100 text-emerald-800" }
+          : { text: "模型未连接 · 可用本地指令", cls: "bg-amber-100 text-amber-800" }
         : { text: "离线本地模式", cls: "bg-amber-100 text-amber-800" };
 
   return (

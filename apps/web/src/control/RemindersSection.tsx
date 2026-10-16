@@ -36,7 +36,7 @@ export const RemindersSection = ({ host, readonly }: { host: ControlHost; readon
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-4" data-vivic-reminders>
       <div className="flex items-center gap-2 text-sm font-semibold"><Bell className="h-4 w-4" />提醒</div>
-      <p className="mt-2 text-xs text-neutral-500">控制页保持打开时检查所有画布；到时显示提示，开启语音后播报。浏览器休眠可能延迟，恢复后补报；关闭控制页期间不会后台发声。</p>
+      <p className="mt-2 text-xs text-neutral-500">到时提示音独立于语音播报。远于一小时的事项和待触发条件保留在这里；临近时进入画布，定时与重复提醒单独标识。到时后一次性卡片退场，记录保留。控制页需保持打开。</p>
       <NotificationSettings disabled={readonly} />
       {snapshot.reminders.length === 0 && <p className="mt-3 text-sm text-neutral-500">试试：10分钟后提醒我喝水，20分钟后提醒我休息。</p>}
       <ul className="mt-3 space-y-2">

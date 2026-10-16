@@ -80,6 +80,9 @@ export const AiSection = ({ onBackendChange, disabled = false }: AiSectionProps)
 
   useEffect(() => {
     void refresh();
+    const timer = setInterval(() => void refresh(), 5000);
+    window.addEventListener("focus", refresh);
+    return () => { clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [refresh]);
 
   const stepfun =

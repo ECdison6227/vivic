@@ -53,10 +53,9 @@ export const StageRoot = () => {
       data-vivic-theme={resolvedTheme}
     >
       <BackgroundLayer theme={resolvedTheme} />
-      <motion.div className="pointer-events-none absolute inset-0 z-[1]"
+      <motion.div className="vivic-reminder-glow pointer-events-none absolute inset-0 z-[25]"
         aria-hidden="true" data-vivic-reminder-glow={reminderAlert ? "true" : undefined}
-        style={{ background: "radial-gradient(ellipse at 50% 100%, rgb(250 165 75 / 0.28), transparent 70%)" }}
-        animate={{ opacity: reminderAlert ? 1 : 0 }} transition={{ duration: reduced ? 0 : 1.2 }}
+        animate={{ opacity: reminderAlert ? 1 : 0 }} transition={{ duration: reduced ? 0 : 0.6 }}
       />
       {stage === "WORKSPACE" && <CanvasView resolvedTheme={resolvedTheme} />}
       <BlackVeil />

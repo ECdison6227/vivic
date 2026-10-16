@@ -1,4 +1,4 @@
-import { presentCards, groupedReminder, completedCountdown } from "@/canvas/reminderPresentation";
+import { presentCards, groupedReminder, completedCountdown, reminderGroupKey, reminderVisible } from "@/canvas/reminderPresentation";
 import { CARD_METRICS, CARD_INNER_HEIGHT } from "@/cards/metrics";
 import { useSyncExternalStore } from "react";
 import {
@@ -163,8 +163,8 @@ const placeCards = (cards: CardState[], preserved: ReadonlySet<string> = new Set
   });
 };
 
-export const relayout = (cards: CardState[], preserved: ReadonlySet<string> = new Set()): CardState[] => {
-  const view = presentCards(cards);
+export const relayout = (cards: CardState[], preserved: ReadonlySet<string> = new Set(), focusId?: string): CardState[] => {
+  const view = presentCards(cards, { focusId });
   const fixed = new Set(preserved);
   for (const group of view) if (group.memberIds.some(id => preserved.has(id))) fixed.add(group.entry.record.id);
   const placed = placeCards(view.map(item => item.entry), fixed);
@@ -232,6 +232,7 @@ const applyAction = (
       if (!card) return state;
       return {
         ...state,
+        cards: !reminderVisible(card) ? relayout(state.cards, new Set(state.cards.filter(c => reminderVisible(c)).map(c => c.record.id)), card.record.id) : state.cards,
         focus: { cardId: card.record.id, prevViewport: state.viewport },
         focusHistory: [...state.focusHistory, card.record.id].slice(-20),
       };
@@ -319,6 +320,8 @@ const applyAction = (
     }
     case "subtitle.show": {
       if (!action.text.trim()) return state;
+      if (action.priority !== "reminder" && state.subtitle?.priority === "reminder"
+        && Date.now() < state.subtitle.shownAt + state.subtitle.durationMs) return state;
       return {
         ...state,
         subtitle: {
@@ -511,7 +514,7 @@ export const createCanvasStore = (): CanvasStore => {
   let preferences = { ...DEFAULT_DISPLAY_PREFERENCES };
   const applyPreferences = (next: VivicState): VivicState => ({ ...next,
     ambient: { ...next.ambient, theme: preferences.theme },
-    subtitle: preferences.subtitles ? next.subtitle : null,
+    subtitle: preferences.subtitles || next.subtitle?.priority === "reminder" ? next.subtitle : null,
   });
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((l) => l());
@@ -547,7 +550,7 @@ export const createCanvasStore = (): CanvasStore => {
         metadata: { ...entry.record.metadata, updatedAt: new Date().toISOString() },
       });
       if (!candidate.success) return { ok: false, error: "invalid-card" };
-      const grouped = action.kind === "card.move" && groupedReminder(entry) ? state.cards.filter(groupedReminder) : [entry];
+      const grouped = action.kind === "card.move" && groupedReminder(entry) ? state.cards.filter(c => groupedReminder(c) && reminderGroupKey(c) === reminderGroupKey(entry)) : [entry];
       const dx = candidate.data.layout.x - layout.x, dy = candidate.data.layout.y - layout.y;
       const cards = state.cards.map(c => c === entry ? { ...c, record: candidate.data }
         : grouped.includes(c) ? { ...c, record: { ...c.record, layout: { ...c.record.layout, x: c.record.layout.x + dx, y: c.record.layout.y + dy } } } : c);
@@ -565,7 +568,7 @@ export const createCanvasStore = (): CanvasStore => {
       );
       const next = reduceEnvelope(state, parsed.data);
       if (next !== state) {
-        state = preferences.subtitles ? next : { ...next, subtitle: null };
+        state = preferences.subtitles || next.subtitle?.priority === "reminder" ? next : { ...next, subtitle: null };
         emit();
       }
       return { ok: true, deduplicated };
