@@ -20,6 +20,9 @@ for (const tab of [page, display]) tab.on("pageerror", e => report.pageErrors.pu
 const state = () => page.evaluate(() => window.__vivic.getState());
 const records = async type => (await state()).cards.filter(c => !c.exitingRequestId && (!type || c.record.type === type)).map(c => c.record);
 const feedback = page.locator("[data-vivic-command-feedback]");
+async function expectCentered(id) {
+  await expect.poll(async () => { const box = await display.locator(`[data-card-id="${id}"]`).boundingBox(); return box ? Math.max(Math.abs(box.x + box.width / 2 - 720), Math.abs(box.y + box.height / 2 - 450)) : 10000; }).toBeLessThan(35);
+}
 let latestResponse;
 page.on("response", response => { if (response.url().endsWith("/api/intent")) latestResponse = response.json().catch(() => undefined); });
 async function send(text) {
@@ -52,8 +55,8 @@ try {
   await display.goto(base + "/display");
   await expect(display.locator("[data-vivic-stage]")).toBeVisible();
   await fresh("A 基础");
-  await check("A1", "十分钟倒计时", async () => { await expect(display.locator("[data-card-id]")).toHaveCount(1); assert.match(await display.locator("[data-card-id]").innerText(), /^\d{2}:\d{2}$/); });
-  await check("A2", "添加待办：买菜；回复邮件；完成测试", async () => { const todo = (await records("TodoCard"))[0]; assert.equal(todo.displayProps.items.length, 3); assert.equal((await state()).focus.cardId, todo.id); });
+  await check("A1", "十分钟倒计时", async () => { await expect(display.locator("[data-card-id]")).toHaveCount(1); assert.match(await display.locator("[data-card-id]").innerText(), /^\d{2}:\d{2}$/); await expectCentered((await records("CountdownCard"))[0].id); });
+  await check("A2", "添加待办：买菜；回复邮件；完成测试", async () => { const todo = (await records("TodoCard"))[0]; assert.equal(todo.displayProps.items.length, 3); assert.equal((await state()).focus.cardId, todo.id); await expectCentered(todo.id); });
   await check("A3", "把待办第2项标记为完成", async () => assert.equal((await records("TodoCard"))[0].displayProps.items[1].done, true));
   await check("A4", "把待办第2项标记为未完成", async () => assert.equal((await records("TodoCard"))[0].displayProps.items[1].done, false));
   await check("A5", "高亮待办第二项", async () => assert.equal((await state()).highlight.itemId, (await records("TodoCard"))[0].displayProps.items[1].id));

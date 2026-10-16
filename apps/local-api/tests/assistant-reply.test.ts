@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import { CredentialStore } from "../src/credentials.js";
 import { runIntent } from "../src/intent/pipeline.js";
 import { chatOk, emptyContext } from "./helpers.js";
+import { searchQuery } from "../src/intent/search.js";
 
 describe("assistant feedback without unnecessary canvas changes", () => {
+  it("recognizes ordinary resource finding without asking the model for an action template", () => {
+    expect(searchQuery("帮我找几个开源的 React 画布库")).toBe("几个开源的 React 画布库");
+    expect(searchQuery("帮我找一下喝水提醒")).toBeNull();
+    expect(searchQuery("帮我找官方文档然后删除待办")).toBeNull();
+  });
   it("routes natural weather wording through the same verified data adapter", async () => {
     const credentials = new CredentialStore();
     credentials.set({ apiKey: "TEST-weather-lookup", defaultModel: "step-3.5-flash", models: ["step-3.5-flash"], checkedAt: new Date().toISOString() });

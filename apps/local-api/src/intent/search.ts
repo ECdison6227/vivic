@@ -11,6 +11,8 @@ import type { SearchSummary } from "./searchSummary.js";
 export const searchQuery = (text: string): string | null => {
   const raw = text.trim();
   if (/^(?:查看|查询当前|查询刚才)/.test(raw) || /[，,；;]\s*(?:再|并|然后)?\s*(?:删除|取消|放大|聚焦|创建|添加)/.test(raw)) return null;
+  const find = raw.match(/^(?:请帮我|请|帮我)?\s*找(?:一下|一找)?\s*(.+)$/);
+  if (find && /资料|文档|网页|网站|开源|官方|库/.test(find[1]!) && !/待办|便笺|便签|提醒|倒计时|然后|同时|并且|顺便|并(?:删除|创建|添加|聚焦)|再(?:删除|创建|添加)|不要|不用|[；;\n]/.test(find[1]!)) return find[1]!.trim();
   const match = raw.match(/^(?:请帮我|请|帮我)?\s*(?:搜索|搜一下|搜一搜|搜|查找|查一下|查一查|查查|查询|查)\s*(.+)$/);
   return match?.[1]?.trim() || null;
 };
