@@ -158,6 +158,17 @@ export const parseCommand = (
       spokenText: timerState[1] === "暂停" ? "已暂停提醒" : "已继续提醒", description: "更新提醒状态" };
   }
 
+  const highlightTodo = input.match(/^(?:请)?高亮(?:显示)?(?:第([一二两三四五六七八九十\d]+)张)?待办(?:卡片)?(?:的)?第([一二两三四五六七八九十\d]+)项[。！!]?$/)
+    ?? input.match(/^(?:请)?(?:把|将)?(?:第([一二两三四五六七八九十\d]+)张)?待办(?:卡片)?(?:的)?第([一二两三四五六七八九十\d]+)项(?:高亮|高亮显示)[。！!]?$/);
+  if (highlightTodo) {
+    const todos = ctx.state.cards.filter(c => !c.exitingRequestId && c.record.type === "TodoCard");
+    const cardIndex = highlightTodo[1] ? zhToNumber(highlightTodo[1]) : todos.length === 1 ? 1 : null;
+    const itemIndex = zhToNumber(highlightTodo[2]!);
+    const card = cardIndex ? todos[cardIndex - 1]?.record : undefined;
+    if (card?.type !== "TodoCard" || !itemIndex || !card.displayProps.items[itemIndex - 1]) return { kind: "unknown", message: "请明确第几张待办和第几项。" };
+    return { kind: "envelope", actions: [{ type: "card.highlight", targetId: card.id, itemId: card.displayProps.items[itemIndex - 1]!.id, durationMs: 6000 }], spokenText: `已高亮待办第${itemIndex}项`, description: "高亮待办条目" };
+  }
+
   // A reference command cannot silently execute only the first clause.
   if (/^(?:删除|删掉|删了|删|移除|去掉|放大|聚焦|高亮|选中|看一看|看下|看看|focus)/i.test(input)
     && /然后|并且|同时|顺便|接着|不要|不用|别|[，,；;\n]|再(?:删|创建|聚焦|添加|提醒|显示|恢复|放大)|并(?:删|创建|聚焦|添加|提醒)|(?:待办|倒计时|便笺|便签|卡片).*(?:和|以及|与|或者).*(?:待办|倒计时|便笺|便签|卡片)/.test(input)) {
@@ -165,7 +176,7 @@ export const parseCommand = (
   }
 
   // canvas-level views
-  if (/^(显示全部|全部显示|看全部|适应画布|fit)$/i.test(input)) {
+  if (/^(?:请|帮我|请帮我)?\s*(?:(?:显示|展示|看看|看|全部显示)(?:一下)?(?:所有|全部)?(?:的)?卡片|显示全部|全部显示|看全部|适应画布|fit)[。！!]*$/i.test(input)) {
     return {
       kind: "envelope",
       actions: withAwaken(ctx, [{ type: "canvas.fit" }]),
@@ -188,6 +199,15 @@ export const parseCommand = (
       actions: [{ type: "stage.awaken" }],
       description: "唤醒",
     };
+  }
+
+  const note = input.match(/^(?:请|帮我|请帮我)?\s*(?:创建|新建|添加|记下|记|记录)(?:一?[张个条])?(?:便笺|便签|笔记)\s*[:：]\s*([\s\S]+)$/);
+  if (note && note[1]!.trim().length <= 500) {
+    const stamp = new Date(now).toISOString();
+    return { kind: "envelope", spokenText: "已记下便笺", description: "创建便笺", actions: withAwaken(ctx, [{ type: "card.create", card: {
+      id: newId("note"), type: "NoteCard", variant: "minimal", displayProps: { text: note[1]!.trim() }, sourceData: {}, sources: [],
+      layout: { x: 0, y: 0, width: 320, height: 120, pinned: false }, metadata: { createdAt: stamp, updatedAt: stamp },
+    } }]) };
   }
 
   // Note density is an explicit data action; card.focus remains camera-only.
@@ -326,7 +346,7 @@ export const parseCommand = (
   return {
     kind: "unknown",
     message:
-      "暂时只懂这些指令：倒计时 / 加待办 / 放大… / 展开便笺 / 收起便笺 / 删除… / 显示全部 / 恢复原视图 / 撤销（搜索、天气等联网能力在 Phase 2 接入）",
+      "当前无法连接决策服务。倒计时、待办、找卡和排布仍可使用；请检查 Control 的 AI 连接后重试这句话。",
   };
 };
 

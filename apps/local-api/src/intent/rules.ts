@@ -78,6 +78,16 @@ export const matchRules = (rawText: string, ctx: CanvasContext): RuleHit | null 
     return { actions: [{ type: "stage.awaken" }], spokenText: "已唤醒" };
   }
 
+  // Explicit literal note content needs no probabilistic IDs or timestamps.
+  const note = input.match(/^(?:请|帮我|请帮我)?\s*(?:创建|新建|添加|记下|记|记录)(?:一?[张个条])?(?:便笺|便签|笔记)\s*[:：]\s*([\s\S]+)$/);
+  if (note && note[1]!.trim().length <= 500) {
+    const stamp = iso();
+    return { spokenText: "已记下便笺", actions: withAwaken([{ type: "card.create", card: {
+      id: newId("note"), type: "NoteCard", variant: "minimal", displayProps: { text: note[1]!.trim() }, sourceData: {}, sources: [],
+      layout: { x: 0, y: 0, width: 320, height: 120, pinned: false }, metadata: { createdAt: stamp, updatedAt: stamp },
+    } }]) };
+  }
+
   const reminders = parseExactReminders(input);
   if (reminders) return { actions: buildReminderActions(reminders, ctx), spokenText: `已设置 ${reminders.length} 项提醒` };
 

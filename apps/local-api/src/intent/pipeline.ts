@@ -44,7 +44,13 @@ export interface PipelineDeps {
   isSessionCurrent?: () => boolean;
   data?: { handleDataIntent: (text: string, context: CanvasContext, signal?: AbortSignal) => Promise<IntentResult | null> };
 }
+const LookupSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("weather"), city: z.string().trim().min(1).max(100) }),
+  z.strictObject({ kind: z.literal("search"), query: z.string().trim().min(1).max(200) }),
+]);
 const PlannerOutputSchema = z.union([
+  z.strictObject({ lookup: LookupSchema }),
+  z.strictObject({ reply: z.string().trim().min(1).max(180) }),
   z.strictObject({ clarify: z.string().trim().min(1).max(180) }),
   z.looseObject({ actions: z.array(z.unknown()).max(12), spokenText: z.string().max(180).optional(),
     clarify: z.string().trim().min(1).max(180).optional() }),
@@ -63,13 +69,14 @@ export const runIntent = async (
   req: IntentRequest,
   deps: PipelineDeps,
   signal?: AbortSignal,
+  adapterOnly = false,
 ): Promise<IntentResult> => {
   const budget = createBudget(INTENT_BUDGET_MS, [signal, deps.stepfun.signal]);
   let usedProvider: IntentResult["usedProvider"];
   try {
     budget.signal.throwIfAborted();
     const hasImages = Boolean(req.attachments?.length);
-    const continuation = req.continuation && !startsNewInstruction(req.text) ? req.continuation : undefined;
+    const continuation = req.continuation && !startsNewInstruction(req.text, req.continuation.utterance) ? req.continuation : undefined;
     const scheduled = !hasImages && !continuation ? scheduledReminderIntent(req.text, req.canvasContext) : null;
     if (scheduled) {
       if (!scheduled.actions) return { kind: "clarify", message: scheduled.message, usedProvider: "rules" };
@@ -95,6 +102,9 @@ export const runIntent = async (
       if (dataResult) return dataResult;
     }
     const query = hasImages || continuation ? null : searchQuery(req.text);
+    if (!hasImages && /^(?:请帮我|帮我|请)?\s*(?:读取|阅读|打开|查看)(?:这个网页|网页|链接)?\s*[:：]?\s*http:\/\//.test(req.text.trim())) {
+      return { kind: "clarify", message: "请提供公开的 HTTPS 网页链接；不能读取本机、内网或未加密的 HTTP 地址。", usedProvider: "rules" };
+    }
     const pageUrl = !hasImages && !continuation ? articleRequest(req.text) : null;
     if (pageUrl && deps.search?.fetchContent) {
       try {
@@ -126,11 +136,12 @@ export const runIntent = async (
         return { kind: "error", message: `联网查询暂不可用：${publicSearchError(error).message}`.slice(0, 400), usedProvider };
       }
     }
-    if (deps.decision && !hasImages && !continuation) {
+    if (deps.decision && !hasImages && !continuation && !adapterOnly) {
       const result = await localDecisionIntent(req.text, req.canvasContext, deps.decision, budget.signal);
       budget.signal.throwIfAborted();
       if (result) return result;
     }
+    if (adapterOnly) return { kind: "clarify", message: "请明确要查询的城市或资料关键词；本次没有执行其他操作。", usedProvider: "rules" };
     const credential = deps.credentials.getSecret();
     if (deps.planner ? !deps.planner.connected : !credential) return { kind: "unknown", message: deps.planner ? "GPT 未连接；本地文字指令仍可使用。请先连接 GPT 或选择 StepFun。" : OFFLINE_MESSAGE, usedProvider: "rules-offline" };
     usedProvider = deps.planner?.provider ?? "stepfun";
@@ -170,8 +181,24 @@ export const runIntent = async (
       } else {
         const output = PlannerOutputSchema.safeParse(res.value);
         if (output.success) {
+          if (!("actions" in output.data) && "lookup" in output.data) {
+            const lookup = LookupSchema.safeParse(output.data.lookup);
+            if (lookup.success && !hasImages) {
+              if (/然后|同时|顺便|并且|[；;\n]|不要|不用|别/.test(req.text)) return { kind: "clarify", message: "这句话包含多个要求，请先确认要查询的内容，再处理其他操作。", usedProvider };
+              const request = lookup.data;
+              if (request.kind === "weather" ? !deps.data : !deps.search) return { kind: "error", message: "查询服务暂时不可用，请稍后重试。", usedProvider };
+              // Re-enter the existing verified adapter using a closed grammar.
+              // The outer signal keeps the original deadline; no model tools,
+              // credentials, code or extra network capabilities are exposed.
+              return await runIntent({ text: request.kind === "weather" ? `${request.city}天气` : `搜索 ${request.query}`, canvasContext: req.canvasContext }, deps, budget.signal, true);
+            }
+          }
+          if (!("actions" in output.data) && "reply" in output.data && typeof output.data.reply === "string") {
+            const envelope = assembleEnvelope([{ type: "subtitle.show", text: output.data.reply.slice(0, 120), durationMs: 12000 }], req.canvasContext.canvasId, output.data.reply);
+            if (envelope) return { kind: "envelope", envelope, usedProvider };
+          }
           // Explicit clarification always wins, even if actions accompany it.
-          if (output.data.clarify) return { kind: "clarify", message: output.data.clarify, usedProvider };
+          if ("clarify" in output.data && output.data.clarify) return { kind: "clarify", message: output.data.clarify, usedProvider };
           if ("actions" in output.data) {
             if (!output.data.actions.length) return { kind: /[？?]/.test(output.data.spokenText ?? "") ? "clarify" : "unknown",
               message: output.data.spokenText ?? "这条指令我还不会处理，没有映射到画布动作。", usedProvider };
