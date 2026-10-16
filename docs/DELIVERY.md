@@ -2,7 +2,7 @@
 
 2026-10-16。当前为可运行个人 Web MVP 和一期收尾版本；**完整人工验收尚未结束，二期尚未启动**。
 
-当前入口：[Control](http://localhost:5173/control)、[Display](http://localhost:5173/display)。服务已经运行时不用重新启动；后端重启会丢失 StepFun 内存 Key。不要读取或打印认证文件，不要把账号连接状态当作永久配置。
+当前入口：[Control](http://localhost:5175/control)、[Display](http://localhost:5175/display)。服务已经运行时不用重新启动；后端重启会丢失 StepFun 内存 Key。不要读取或打印认证文件，不要把账号连接状态当作永久配置。
 
 ## 本次交付
 

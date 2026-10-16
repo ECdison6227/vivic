@@ -1,6 +1,6 @@
 # 现在开始逐组验收
 
-2026-10-16：一期收尾修复已实施，当前按 [完整测试清单](FINAL_ACCEPTANCE_CHECKLIST.md) 从头测试。旧的“手测后再新 GPT 登录、再做三项体验”顺序已经完成，不再重复。
+2026-10-16：一期收尾修复已实施，入口为 **[http://localhost:5175/control](http://localhost:5175/control)**，当前按 [完整测试清单](FINAL_ACCEPTANCE_CHECKLIST.md) 从头测试。5173 是其他项目，原因见 [入口修正](entry-port-20261016.md)。旧的“手测后再新 GPT 登录、再做三项体验”顺序已经完成，不再重复。
 
 现在先做清单第 0 组：独立 TEST 浏览器配置、打开 Control、保持 TTS 关闭、建立 TEST 画布、打开同源 Display、建一个纯计时器，再刷新恢复。每个编号记录通过/失败；一组遇到问题先反馈修复，再做下一组。
 

@@ -870,7 +870,7 @@
     "temporaryTestServersClosed": true
   },
   "localService": {
-    "web": "http://localhost:5173/control",
+    "web": "http://localhost:5175/control",
     "apiHealth": "http://127.0.0.1:8787/healthz",
     "existingFrontendRestarted": false,
     "apiStartedBecauseNotRunning": true,
@@ -880,7 +880,16 @@
     },
     "accountRestored": false,
     "keptRunningForManualAcceptance": true,
-    "log": "/tmp/vivic-local-api-finalization-20261016.log"
+    "log": "/tmp/vivic-local-api-finalization-20261016.log",
+    "entryCorrection": {
+      "previouslyReportedWeb": "http://localhost:5173/control",
+      "previousWebIdentityVerified": false,
+      "problem": "HTTP 200 was checked without app identity; 5173 actually belonged to another project.",
+      "correctedWeb": "http://localhost:5175/control",
+      "verification": "docs/verification/entry-port-20261016.json",
+      "oldOtherProjectStopped": false,
+      "userCanvasReadOrMigrated": false
+    }
   },
   "remainingAcceptance": [
     "User microphone/default wake phrase/environment noise/voice sound/device/Plan word timestamp permissions",

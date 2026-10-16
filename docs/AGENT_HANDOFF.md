@@ -2,7 +2,13 @@
 
 交接日期：2026-10-15。工作目录 `/Users/cjr/Projects/vivic`，macOS Apple M1 / 8 GiB。用户准备切换 Agent，当前任务是交付和人工测试，**不是要求重新开始项目或再次完整重做 PoC**。
 
-## 2026-10-16 最新：一期收尾后逐组手测，二期暂记候选
+## 2026-10-16 最新：手测入口固定 5175
+
+用户截图发现旧 5173 地址实际是另一个发布会项目；先前“HTTP 200 即前端正常”的核对不充分。已将 Vivic 日常 Web 固定为 `http://localhost:5175/control` / `/display`，API 仍是 8787，测试仍是 5174/8788。Vite strictPort 防止静默换端口，API 精确允许新 origin，页面 title 标记 Vivic。未停止/修改其他项目，旧画布未读取或清除；换端口后原 origin 存储不会自动迁移。
+
+验证见 [入口修正](entry-port-20261016.md)、[摘要](verification/entry-port-20261016.json)：真实 5175 的独立浏览器已确认 Control 主标题、同源 API POST 和 Display 同步，未用模型/麦克风/声音或真实画布。此前两种 provider 均未连接，配置重载没有丢失内存 Key。当前清单链接已更新；下文旧端口与旧“前端仍在”描述仅为历史，应以本节为准。
+
+## 2026-10-16：一期收尾后逐组手测，二期暂记候选
 
 用户已要求修复审计中的当前交付问题，提供从首次使用开始的完整清单，测试结束后再逐项做二期。本轮实现见 [一期收尾](finalization-20261016.md)、[验证摘要](verification/finalization-20261016.json)，手测入口统一为 [完整清单](FINAL_ACCEPTANCE_CHECKLIST.md)。生产 Display 调试限制、共享生成的 JSON 契约/一致性测试、UTC 示例及两条旧浏览器流程已修正，不能再按下文旧审计重复修复。没有改聚焦的数据密度或退回旧提醒显示。
 
@@ -96,7 +102,7 @@ Winnow 已定位为 [EldanRing/Winnow-E4B](https://huggingface.co/EldanRing/Winn
 
 ## 运行与连接
 
-- Web：`http://localhost:5173/control` / `/display`；API：`http://127.0.0.1:8787`。
+- Web（当前固定 5175）：`http://localhost:5175/control` / `/display`；API：`http://127.0.0.1:8787`。
 - 当前已有后台 `pnpm dev`，日志 `/tmp/vivic-dev-$(id -u).log`。切 Agent 不需要重启；先请求 `/healthz` 或检查端口，避免占用重复服务。
 - 从零启动：Node >=22.19.0，`pnpm install`、`pnpm dev`。API 的本机 bearer 位于被忽略的 `apps/local-api/.env.local`，代理注入，不能打印文件内容。
 - 交接检查时 StepFun 和 GPT 均连接，当前 StepFun `step-3.5-flash`，GPT `gpt-6-luna`。这是易失进程状态，后端重载会清空连接；不要反复要求用户发送 Key。GPT 可通过 Control「使用本机 Pi 登录」恢复现有授权。

@@ -1,5 +1,7 @@
 # Vivic v0.6 — 双页面信息画布
 
+当前入口：**[http://localhost:5175/control](http://localhost:5175/control)**。5173 当前由其他项目占用；Vivic 固定使用 5175，端口冲突时明确报错，不自动换端口。详见 [入口修正](docs/entry-port-20261016.md)。
+
 自然语言驱动的极简信息画布，Web First 个人版 MVP。当前已实现 **StepFun Coding Plan / GPT 两种 LLM、独立语音、七类卡片、真实天气/搜索、数值图表/转换、当次图片、拖动/固定、事项提醒、子卡片、长文详情与中文/拼音找卡**。用户参与的新 GPT 授权已于 2026-10-16 完成；本人语音/设备与本轮完整手测仍待逐项验收。
 
 现在先看 [一期收尾与本轮检查](docs/finalization-20261016.md)，从 [完整测试清单第 0 组](docs/FINAL_ACCEPTANCE_CHECKLIST.md) 开始。128 项人工操作和 9 项技术检查分组进行，先修反馈，再逐条讨论 [二期候选](docs/PHASE2_CANDIDATES.md)，不同时加入部署/多用户/手机/新卡片功能。
@@ -14,7 +16,7 @@
 
 ```sh
 pnpm install
-pnpm dev          # web :5173；local-api 127.0.0.1:8787
+pnpm dev          # web :5175；local-api 127.0.0.1:8787
 ```
 
 `pnpm dev:web` / `pnpm dev:api` 可分别启动。本轮手测使用上述开发代理；`pnpm build` 的静态文件不等于已交付服务器/多用户部署方案，生产路由与认证代理需在二期单独验证。服务仅绑定 loopback；本地 bearer 由开发代理在服务端注入，浏览器不持有该令牌。后端热重启会清空 StepFun 内存 Key，需要重连。
@@ -80,7 +82,7 @@ pnpm --filter @vivic/web exec playwright test --config playwright.production.con
 node scripts/verify-stability.mjs --no-video
 ```
 
-这些命令按顺序运行，浏览器使用预留 5174/8788，不与日常 5173/8787 混用；长测与其他浏览器命令串行。实际执行结果见一期验证摘要。真实联网需对应用户授权/连接，离线测试不能替代账号权限验收；自动化静音，不采集物理麦克风。
+这些命令按顺序运行，浏览器使用预留 5174/8788，不与日常 5175/8787 混用；长测与其他浏览器命令串行。实际执行结果见一期验证摘要。真实联网需对应用户授权/连接，离线测试不能替代账号权限验收；自动化静音，不采集物理麦克风。
 
 ## 目录
 
