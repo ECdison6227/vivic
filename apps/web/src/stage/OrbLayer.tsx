@@ -42,6 +42,11 @@ export const OrbLayer = () => {
 
   const center = anchorCenter("top-center", screen.width, screen.height, feedbackSize);
   const feedbackSpot = { anchor: "top-center", x: center.x - feedbackSize / 2, y: center.y - feedbackSize / 2 };
+  // Resting position: STANDBY/AWAKENING sit at screen centre, a feedback orb at
+  // its anchor. Plain CSS, never animated: the orb appears and changes anchor
+  // in place — only opacity/scale move (user feedback 2026-10-16).
+  const restX = feedback ? feedbackSpot.x : (screen.width - feedbackSize) / 2;
+  const restY = feedback ? feedbackSpot.y : (screen.height - feedbackSize) / 2;
 
   return (
     <div
@@ -55,14 +60,14 @@ export const OrbLayer = () => {
         {directive.visible && screen.width > 0 && (
           <motion.div
             key="orb"
-            className="absolute left-0 top-0"
+            className="absolute"
+            style={{ left: restX, top: restY }}
             data-vivic-orb-anchor={feedback ? feedbackSpot?.anchor : undefined}
             initial={{ opacity: 0, scale: 1 }}
             animate={
               awakening && !reduceMotion
-                ? { opacity: [1, 1, 0], scale: [1, 1.16, 1.04], x: (screen.width - feedbackSize) / 2, y: (screen.height - feedbackSize) / 2 }
-                : { opacity: 1, scale: 1, x: feedback ? feedbackSpot?.x ?? 0 : (screen.width - feedbackSize) / 2,
-                  y: feedback ? feedbackSpot?.y ?? 0 : (screen.height - feedbackSize) / 2 }
+                ? { opacity: [1, 1, 0], scale: [1, 1.16, 1.04] }
+                : { opacity: 1, scale: 1 }
             }
             exit={{ opacity: 0, scale: 1.4, transition: { duration: 0.4 } }}
             transition={
