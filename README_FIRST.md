@@ -4,7 +4,9 @@
 
 当前入口为 **[Vivic Control](http://localhost:5175/control)**，Display 使用同端口。5173 已由其他项目占用；Vivic 默认固定 5175，5174/8788 留给自动化。修正原因和实际页面/API 验证见 [入口修正](docs/entry-port-20261016.md)。不要仅凭 HTTP 200 判定服务身份，不停止其他项目来腾端口。
 
-2026-10-16 当前顺序：看 [一期收尾修复](docs/finalization-20261016.md)，按 [完整测试清单](docs/FINAL_ACCEPTANCE_CHECKLIST.md) 从第 0 组逐项测试、修复反馈，再讨论 [二期候选](docs/PHASE2_CANDIDATES.md)。三项体验和新 GPT 授权已实现/验证，不能根据旧“下一 case”段落重复开发或要求再次登录。[审计](docs/project-audit-20261016.md) 保留修复前的事实。
+2026-10-16 使用反馈已转为 **Agent 直接实测与修复**，见 [本轮修复](docs/user-feedback-20261016.md) 和 [逐条实际输入](docs/USER_TEST_RESULTS_20261016.md)。普通对话/自然查询、澄清串题、连接状态、固定 Orb、提醒可见范围与到时提示均有更新；不再要求用户先重做整套第 0 组。二期仍未启动。
+
+一期收尾历史见 [修复记录](docs/finalization-20261016.md)，[完整测试清单](docs/FINAL_ACCEPTANCE_CHECKLIST.md) 保留供查阅和现场验收；当前先收束使用反馈，再讨论 [二期候选](docs/PHASE2_CANDIDATES.md)。三项体验和新 GPT 授权已实现/验证，不能根据旧“下一 case”段落重复开发或要求再次登录。[审计](docs/project-audit-20261016.md) 保留修复前的事实。
 
 1. 阅读 [下一位 Agent 交接](docs/AGENT_HANDOFF.md)：当前状态、运行方式、约束与建议顺序。
 2. 阅读 [交付说明](docs/DELIVERY.md) 和 [用户测试清单](docs/MANUAL_TEST.md)。
