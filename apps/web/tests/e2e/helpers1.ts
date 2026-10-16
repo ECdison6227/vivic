@@ -62,6 +62,8 @@ export const activeCanvasId = async (control: Page): Promise<string> =>
 export const gotoControl = async (context: import("@playwright/test").BrowserContext) => {
   const page = await context.newPage();
   await page.goto("/control");
+  await expect(page).toHaveTitle("Vivic");
+  await expect(page.getByRole("heading", { name: "Vivic 控制端", exact: true })).toBeVisible();
   await page.waitForSelector('[data-vivic-control="ready"]');
   return page;
 };

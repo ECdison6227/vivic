@@ -27,6 +27,20 @@ const presetCredentials = (credentials: CredentialStore) =>
 describe("auth + input hardening", () => {
   const noFetch = fetchStub({});
 
+  it("accepts the configured Vivic origin and rejects another local page even with a valid session bearer", async () => {
+    const app = createApp({ config: testConfig({ allowedOrigins: ["http://localhost:5175"] }), fetchImpl: noFetch });
+    try {
+      const request = (origin: string) => app.request("/api/intent", {
+        method: "POST", headers: { ...authed, origin },
+        body: JSON.stringify({ text: "十分钟倒计时", canvasContext: emptyContext() }),
+      });
+      const allowed = await request("http://localhost:5175");
+      expect(allowed.status).toBe(200);
+      expect(await allowed.json()).toMatchObject({ kind: "envelope", usedProvider: "rules" });
+      expect((await request("http://localhost:5176")).status).toBe(403);
+    } finally { app.dispose(); }
+  });
+
   it("rejects requests without or with a wrong bearer token", async () => {
     const { app } = setup(noFetch);
     expect((await app.request("/api/providers/status")).status).toBe(401);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One-command dev: web (:5173) + local decision API (127.0.0.1:8787).
+ * One-command dev: web (:5175, strict) + local decision API (127.0.0.1:8787).
  * Zero-dependency concurrent runner: pipes prefixed output, forwards signals,
  * and tears the group down if either side exits.
  */

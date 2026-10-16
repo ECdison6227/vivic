@@ -11,6 +11,14 @@ const isolatedConfig = (env: NodeJS.ProcessEnv = {}) => {
   finally { rmSync(dir, { recursive: true, force: true }); }
 };
 describe("independent request budgets", () => {
+  it("allows the dedicated daily origin while keeping tests and explicit origin overrides bounded", () => {
+    const config = isolatedConfig();
+    expect(config.allowedOrigins).toContain("http://localhost:5175");
+    expect(config.allowedOrigins).toContain("http://127.0.0.1:5175");
+    expect(config.allowedOrigins).toContain("http://localhost:5174");
+    expect(config.allowedOrigins).not.toContain("http://localhost:5176");
+    expect(isolatedConfig({ VIVIC_ALLOWED_ORIGINS: "http://localhost:5174" }).allowedOrigins).toEqual(["http://localhost:5174"]);
+  });
   it("defaults to inference 45s, connection 12s and speech 15s", () => {
     expect(isolatedConfig()).toMatchObject({ requestTimeoutMs: 45_000,
       connectionTimeoutMs: 12_000, speechTimeoutMs: 15_000 });
