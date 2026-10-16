@@ -2,6 +2,17 @@
 
 交接日期：2026-10-15。工作目录 `/Users/cjr/Projects/vivic`，macOS Apple M1 / 8 GiB。用户准备切换 Agent，当前任务是交付和人工测试，**不是要求重新开始项目或再次完整重做 PoC**。
 
+## 2026-10-16 最新：三项体验优化
+
+用户已在新 case 授权并实施排版材质、Control 长内容详情与快速找卡；原候选 brief 的「未实施」是历史状态。说明与边界见 [experience-20261016.md](experience-20261016.md)，验证摘要见 [verification/experience-20261016.json](verification/experience-20261016.json)。
+
+- 现有字体、Assistant UI styled registry、Radix/shadcn、Motion、React Flow、Grainient/Orb 保留；正文/来源/材质 tokens 与布局估算对齐，纯计时数字与带事项提醒合并均保留。
+- Control「卡片与子卡片」的独立「阅读详情」临时保存卡片 ID、从当前 store 阅读原文，复用 Markdown；不改 Note.variant。子卡片和编号候选系统继续沿用，不能重新开发。
+- 顶部「快速找卡」或 Cmd/Ctrl+K：cmdk + pinyin-match 按需加载，当前画布中文/全拼/首字母候选，完整稳定 ID 区分重复项，只调用既有聚焦 Action。只读可搜索阅读，不能自行接管。切画布、目标删除、owner 变化与 IME 已处理。
+- 临时 ownerId 来自既有 owner 广播，保证持续只读的窗口也能在 owner 换人后关闭阅读层；没有改 wire/persistence schema。固定/增长/撤销/旧画布仍走原布局策略，两个固定卡相互重叠不移动坐标。
+
+前端 386 单测、类型与构建通过；最终浏览器分次结果及截图/录屏位置以本轮验证摘要为准。自动化静音、独立 TEST context，5174/8788，未使用真实画布、麦克风或 GPT 推理额度。真实输入法/物理 Safari/外接屏与 GPU 仍待本人验收；Firefox 语音设置 console 告警已在说明中保留，不扩大本次三项范围。
+
 ## 2026-10-16 最新：子卡片与目标选择
 
 用户随后明确要求本 case 先改交互细节，并更新下一 session prompt。已新增 Control「卡片与子卡片」、按原行关联的持久化扩充、Display Radix Popover/Arrow 阅读、合并提醒精确事项高亮/删除，以及临时冻结编号选择（回复「2号／第二个」、悬停/键盘预览、取消、IME 防误提交）。删除父卡片后撤销携带子卡片一起恢复。固定卡片阅读按钮可点击，不解除固定；切画布后立即编辑的同步时序也已修正。
