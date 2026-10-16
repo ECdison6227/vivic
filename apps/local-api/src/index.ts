@@ -4,6 +4,14 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { installOpenAIEgress, redactProxy } from "./openaiProxy.js";
+
+// Before anything fetches: OpenAI must leave through the user's proxy.
+const egress = installOpenAIEgress();
+const egressProxy = egress.current();
+console.log(egressProxy
+  ? `[vivic-local-api] OpenAI egress via ${redactProxy(egressProxy.url)} (${egressProxy.source}); other hosts direct`
+  : "[vivic-local-api] OpenAI egress direct (no proxy configured)");
 
 const config = loadConfig();
 const app = createApp({ config });

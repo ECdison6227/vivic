@@ -75,3 +75,43 @@ test("feedback orb keeps its top-centre position when cards and camera move", as
   expect(orbBox!.y + orbBox!.height).toBeLessThanOrEqual(600);
   await page.screenshot({ path: path.join(EVIDENCE, "../phase2a/orb-fixed-anchor.png") });
 });
+
+/**
+ * User feedback 2026-10-16 (round 2): the orb must appear in place — no
+ * slide in from the left, and no glide between centre and top anchor.
+ * Samples the on-screen box on every animation frame while it appears.
+ */
+const sampleOrb = (page: import("@playwright/test").Page, selector: string, frames: number) =>
+  page.evaluate(([sel, count]) => new Promise<Array<{ cx: number; cy: number }>>(resolve => {
+    const out: Array<{ cx: number; cy: number }> = [];
+    const tick = () => {
+      const el = document.querySelector(sel as string);
+      if (el) { const r = el.getBoundingClientRect(); out.push({ cx: r.x + r.width / 2, cy: r.y + r.height / 2 }); }
+      if (out.length >= (count as number)) resolve(out); else requestAnimationFrame(tick);
+    };
+    tick();
+  }), [selector, frames] as const);
+
+test("orb appears in place without sliding (standby and feedback)", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 700 });
+  // Arm sampling before the orb mounts, so frame 1 is its birth position.
+  await page.goto("/display");
+  const standby = await sampleOrb(page, ".siri-orb", 20);
+  for (const s of standby) {
+    expect(s.cx).toBeCloseTo(600, 0);
+    expect(s.cy).toBeCloseTo(350, 0);
+  }
+
+  await fire(page, "wake", [{ type: "stage.awaken" }]);
+  await page.waitForSelector('[data-vivic-stage="WORKSPACE"]', { timeout: 6000 });
+  await expect(page.locator("[data-vivic-orb-anchor]")).toHaveCount(0, { timeout: 3000 });
+
+  const pending = sampleOrb(page, "[data-vivic-orb-anchor] .siri-orb", 20);
+  await fire(page, "speak", [{ type: "subtitle.show", text: "在原地出现", durationMs: 4000 }]);
+  const feedback = await pending;
+  expect(feedback.length).toBe(20);
+  for (const s of feedback) {
+    expect(s.cx).toBeCloseTo(600, 0);
+    expect(s.cy).toBeCloseTo(16 + 32, 0); // EDGE + 64px feedback orb / 2
+  }
+});
