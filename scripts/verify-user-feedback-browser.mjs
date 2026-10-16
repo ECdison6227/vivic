@@ -108,7 +108,16 @@ try {
   await check("E7", "表格：甲-3，乙0，丙5.5", async () => assert.deepEqual((await records("TableCard")).at(-1).displayProps.rows.map(row => row[1]), [-3,0,5.5]));
   await fresh("F 联网");
   await check("F1", "上海天气", async row => { assert.equal(row.response.kind, "envelope"); const weather = (await records("WeatherCard"))[0]; assert(weather.sources.some(s => s.provider === "open-meteo/forecast")); await expect(display.locator("[data-card-id]")).toContainText("°C"); });
-  await check("F1-natural", "上海现在多少度", async row => { assert.equal(row.response.kind, "envelope"); assert.equal((await records("WeatherCard")).length, 2); });
+  await check("F1-natural", "上海现在多少度", async row => {
+    assert.equal(row.response.kind, "envelope");
+    const weather = await records("WeatherCard");
+    if (weather.length === 2) assert(weather[1].sources.some(s => s.provider === "open-meteo/forecast"));
+    else {
+      assert.equal(weather.length, 1); assert(row.feedback.includes(String(weather[0].displayProps.tempC)));
+      assert(Date.now() - Date.parse(weather[0].sources.find(s => s.provider === "open-meteo/forecast").fetchedAt) < 300000);
+      row.validation = "Answer matches freshly verified weather already on this canvas; no duplicate card required";
+    }
+  });
   await check("F2", "搜索三个开源 React 画布库并比较", async () => { assert((await records("SearchResultCard")).length > 0); await expect(display.locator("[data-vivic-source-link]").first()).toBeVisible(); });
   await check("F2-natural", "帮我找几个开源的 React 画布库", async row => { assert.equal(row.response.kind, "envelope"); assert((await records("SearchResultCard")).length > 3); });
   await check("F3", "高亮第二个搜索卡片", async () => assert.equal((await state()).highlight.cardId, (await records("SearchResultCard"))[1].id));
