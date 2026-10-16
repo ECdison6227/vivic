@@ -11,6 +11,8 @@
     "build": "pnpm --filter @vivic/web build",
     "test": "pnpm --filter @vivic/web test && pnpm --filter @vivic/local-api test",
     "test:live": "pnpm --filter @vivic/local-api test:live",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "contracts:generate": "pnpm --filter @vivic/local-api exec tsx ../../scripts/generate-contract-schemas.ts",
+    "contracts:check": "pnpm --filter @vivic/local-api exec tsx ../../scripts/generate-contract-schemas.ts --check"
   }
 }

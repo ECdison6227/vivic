@@ -37,7 +37,8 @@ interface CardRecord<T extends RegisteredCardType> {
 
 ## 3. Schema 实现原则
 
-- `contracts/card-record.schema.json` 是基础 wire shape 参考；真实 TypeScript 端可用 Zod 判别联合生成同等 schema。
+- `contracts/{card-record,action-envelope}.schema.json` 从 `packages/contracts` 的共享 Zod 生成。运行 `pnpm contracts:generate` 更新、`pnpm contracts:check` 检查漂移，常规 API 测试也会校验生成物与有效/无效消息。
+- JSON Schema 包括批量删除、子卡片及重复/条件提醒；跨记录目标、owner、数值来源、子卡片 ID 唯一性及真实 IANA 时区仍必须由运行时 Zod/执行边界验证，不能只依赖 JSON 结构校验。日期消息使用与运行时一致的 UTC ISO 字符串。
 - JSON 类型分支的 `additionalProperties: false` 必须落实到 `displayProps`。`sourceData` 虽可扩展，但应限制体积并过滤 secrets。
 - 任何不支持的 `type` 或 `displayProps` 字段拒绝/降级提示，不传给未经注册的任意 React component。
 - Dynamic Generative UI spec 可以由 Adapter 从 Vivic Card 转换而来，但 spec 的组件 registry 是白名单，不向模型开放自定义 HTML/DOM。

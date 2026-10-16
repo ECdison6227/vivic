@@ -24,6 +24,8 @@
   "devDependencies": {
     "@types/jsdom": "27.0.0",
     "@types/node": "^24.13.3",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "vitest": "^5.0.4"

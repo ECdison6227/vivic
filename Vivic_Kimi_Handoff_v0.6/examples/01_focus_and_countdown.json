@@ -12,7 +12,7 @@
         "variant": "minimal",
         "displayProps": {},
         "sourceData": {
-          "targetAt": "2026-10-14T22:15:00+08:00"
+          "targetAt": "2026-10-14T14:15:00Z"
         },
         "sources": [],
         "layout": {
@@ -23,8 +23,8 @@
           "pinned": false
         },
         "metadata": {
-          "createdAt": "2026-10-14T22:05:00+08:00",
-          "updatedAt": "2026-10-14T22:05:00+08:00"
+          "createdAt": "2026-10-14T14:05:00Z",
+          "updatedAt": "2026-10-14T14:05:00Z"
         }
       }
     },

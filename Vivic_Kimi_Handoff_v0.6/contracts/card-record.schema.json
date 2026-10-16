@@ -1,8 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://vivic.local/contracts/card-record.schema.json",
-  "title": "Vivic CardRecord v0.6 (Minimal wire shape)",
-  "description": "Only minimal visible fields are defined; expanded views are explicit extensions in the runtime Zod registry. All card displayProps fields are closed.",
   "oneOf": [
     {
       "type": "object",
@@ -12,63 +9,16 @@
           "minLength": 1,
           "maxLength": 128
         },
-        "type": {
-          "const": "CountdownCard"
-        },
         "variant": {
+          "type": "string",
           "enum": [
             "minimal",
             "standard",
             "expanded"
           ]
         },
-        "displayProps": {
-          "type": "object",
-          "properties": {},
-          "required": [],
-          "additionalProperties": false
-        },
-        "sourceData": {
-          "type": "object",
-          "properties": {
-            "targetAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "startedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "pausedAt": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "reminderText": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 160
-            },
-            "notifiedAt": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "format": "date-time"
-            }
-          },
-          "required": [
-            "targetAt"
-          ],
-          "additionalProperties": false
-        },
         "sources": {
+          "maxItems": 15,
           "type": "array",
           "items": {
             "type": "object",
@@ -79,12 +29,12 @@
               },
               "url": {
                 "type": "string",
-                "format": "uri",
-                "pattern": "^https?://"
+                "pattern": "^https?:\\/\\/"
               },
               "fetchedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
               },
               "provider": {
                 "type": "string",
@@ -102,9 +52,7 @@
               "readFullPage"
             ],
             "additionalProperties": false
-          },
-          "minItems": 0,
-          "maxItems": 15
+          }
         },
         "layout": {
           "type": "object",
@@ -141,26 +89,53 @@
           "properties": {
             "createdAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "updatedAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "aliases": {
+              "maxItems": 12,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 80
-              },
-              "minItems": 0,
-              "maxItems": 12
+              }
             },
             "subcards": {
-              "type": "array",
               "maxItems": 24,
+              "type": "array",
               "items": {
-                "$ref": "#/$defs/subcard"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
               }
             }
           },
@@ -168,18 +143,259 @@
             "createdAt",
             "updatedAt"
           ],
+          "additionalProperties": false,
+          "description": "Subcard IDs must be unique within the parent; enforced by the runtime MetadataSchema."
+        },
+        "type": {
+          "type": "string",
+          "const": "CountdownCard"
+        },
+        "displayProps": {
+          "type": "object",
+          "properties": {},
           "additionalProperties": false
+        },
+        "sourceData": {
+          "type": "object",
+          "properties": {
+            "targetAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "startedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "pausedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reminderText": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "notifiedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "schedule": {
+              "anyOf": [
+                {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "interval"
+                        },
+                        "everySeconds": {
+                          "type": "integer",
+                          "minimum": 5,
+                          "maximum": 31536000
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "everySeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "calendar"
+                        },
+                        "time": {
+                          "type": "string",
+                          "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+                        },
+                        "timeZone": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "description": "Valid IANA time zone; also validated by the runtime TimeZoneSchema."
+                        },
+                        "weekdays": {
+                          "minItems": 1,
+                          "maxItems": 7,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 7
+                          },
+                          "uniqueItems": true
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "time",
+                        "timeZone"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "condition": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "todo.completed",
+                        "countdown.completed"
+                      ]
+                    },
+                    "cardId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "itemId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "delaySeconds": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 86400
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "cardId",
+                    "delaySeconds"
+                  ],
+                  "additionalProperties": false,
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "countdown.completed"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "not": {
+                      "required": [
+                        "itemId"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "conditionMetAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lastDeliveredTargetAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lastFiredAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "description": "Valid IANA time zone; also validated by the runtime TimeZoneSchema."
+            }
+          },
+          "required": [
+            "targetAt"
+          ],
+          "additionalProperties": false,
+          "not": {
+            "required": [
+              "schedule",
+              "condition"
+            ],
+            "properties": {
+              "schedule": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "condition": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            }
+          }
         }
       },
       "required": [
         "id",
-        "type",
         "variant",
-        "displayProps",
-        "sourceData",
         "sources",
         "layout",
-        "metadata"
+        "metadata",
+        "type",
+        "displayProps",
+        "sourceData"
       ],
       "additionalProperties": false
     },
@@ -191,20 +407,153 @@
           "minLength": 1,
           "maxLength": 128
         },
-        "type": {
-          "const": "TodoCard"
-        },
         "variant": {
+          "type": "string",
           "enum": [
             "minimal",
             "standard",
             "expanded"
           ]
         },
+        "sources": {
+          "maxItems": 15,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^https?:\\/\\/"
+              },
+              "fetchedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "readFullPage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title",
+              "url",
+              "fetchedAt",
+              "provider",
+              "readFullPage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 80
+            },
+            "height": {
+              "type": "number",
+              "minimum": 56
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+            "pinned"
+          ],
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "createdAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "aliases": {
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              }
+            },
+            "subcards": {
+              "maxItems": 24,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false,
+          "description": "Subcard IDs must be unique within the parent; enforced by the runtime MetadataSchema."
+        },
+        "type": {
+          "type": "string",
+          "const": "TodoCard"
+        },
         "displayProps": {
           "type": "object",
           "properties": {
             "items": {
+              "minItems": 1,
+              "maxItems": 12,
               "type": "array",
               "items": {
                 "type": "object",
@@ -229,9 +578,7 @@
                   "done"
                 ],
                 "additionalProperties": false
-              },
-              "minItems": 1,
-              "maxItems": 12
+              }
             }
           },
           "required": [
@@ -240,9 +587,41 @@
           "additionalProperties": false
         },
         "sourceData": {
-          "type": "object"
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "variant",
+        "sources",
+        "layout",
+        "metadata",
+        "type",
+        "displayProps",
+        "sourceData"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
         },
         "sources": {
+          "maxItems": 15,
           "type": "array",
           "items": {
             "type": "object",
@@ -253,12 +632,12 @@
               },
               "url": {
                 "type": "string",
-                "format": "uri",
-                "pattern": "^https?://"
+                "pattern": "^https?:\\/\\/"
               },
               "fetchedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
               },
               "provider": {
                 "type": "string",
@@ -276,9 +655,7 @@
               "readFullPage"
             ],
             "additionalProperties": false
-          },
-          "minItems": 0,
-          "maxItems": 15
+          }
         },
         "layout": {
           "type": "object",
@@ -315,26 +692,53 @@
           "properties": {
             "createdAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "updatedAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "aliases": {
+              "maxItems": 12,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 80
-              },
-              "minItems": 0,
-              "maxItems": 12
+              }
             },
             "subcards": {
-              "type": "array",
               "maxItems": 24,
+              "type": "array",
               "items": {
-                "$ref": "#/$defs/subcard"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
               }
             }
           },
@@ -342,38 +746,12 @@
             "createdAt",
             "updatedAt"
           ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "id",
-        "type",
-        "variant",
-        "displayProps",
-        "sourceData",
-        "sources",
-        "layout",
-        "metadata"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
+          "additionalProperties": false,
+          "description": "Subcard IDs must be unique within the parent; enforced by the runtime MetadataSchema."
         },
         "type": {
+          "type": "string",
           "const": "WeatherCard"
-        },
-        "variant": {
-          "enum": [
-            "minimal",
-            "standard",
-            "expanded"
-          ]
         },
         "displayProps": {
           "type": "object",
@@ -384,6 +762,7 @@
               "maximum": 65
             },
             "conditionIcon": {
+              "type": "string",
               "enum": [
                 "sun",
                 "cloud",
@@ -403,9 +782,41 @@
           "additionalProperties": false
         },
         "sourceData": {
-          "type": "object"
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "variant",
+        "sources",
+        "layout",
+        "metadata",
+        "type",
+        "displayProps",
+        "sourceData"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
         },
         "sources": {
+          "maxItems": 15,
           "type": "array",
           "items": {
             "type": "object",
@@ -416,12 +827,12 @@
               },
               "url": {
                 "type": "string",
-                "format": "uri",
-                "pattern": "^https?://"
+                "pattern": "^https?:\\/\\/"
               },
               "fetchedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
               },
               "provider": {
                 "type": "string",
@@ -439,9 +850,7 @@
               "readFullPage"
             ],
             "additionalProperties": false
-          },
-          "minItems": 0,
-          "maxItems": 15
+          }
         },
         "layout": {
           "type": "object",
@@ -478,26 +887,53 @@
           "properties": {
             "createdAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "updatedAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "aliases": {
+              "maxItems": 12,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 80
-              },
-              "minItems": 0,
-              "maxItems": 12
+              }
             },
             "subcards": {
-              "type": "array",
               "maxItems": 24,
+              "type": "array",
               "items": {
-                "$ref": "#/$defs/subcard"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
               }
             }
           },
@@ -505,38 +941,12 @@
             "createdAt",
             "updatedAt"
           ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "id",
-        "type",
-        "variant",
-        "displayProps",
-        "sourceData",
-        "sources",
-        "layout",
-        "metadata"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
+          "additionalProperties": false,
+          "description": "Subcard IDs must be unique within the parent; enforced by the runtime MetadataSchema."
         },
         "type": {
+          "type": "string",
           "const": "NoteCard"
-        },
-        "variant": {
-          "enum": [
-            "minimal",
-            "standard",
-            "expanded"
-          ]
         },
         "displayProps": {
           "type": "object",
@@ -546,22 +956,79 @@
               "maxLength": 500
             },
             "bullets": {
+              "maxItems": 5,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 180
-              },
-              "minItems": 0,
-              "maxItems": 5
+              }
             }
           },
-          "required": [],
           "additionalProperties": false
         },
         "sourceData": {
-          "type": "object"
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "variant",
+        "sources",
+        "layout",
+        "metadata",
+        "type",
+        "displayProps",
+        "sourceData"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "displayProps"
+          ],
+          "properties": {
+            "displayProps": {
+              "required": [
+                "text"
+              ]
+            }
+          }
+        },
+        {
+          "required": [
+            "displayProps"
+          ],
+          "properties": {
+            "displayProps": {
+              "required": [
+                "bullets"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
         },
         "sources": {
+          "minItems": 1,
+          "maxItems": 15,
           "type": "array",
           "items": {
             "type": "object",
@@ -572,12 +1039,12 @@
               },
               "url": {
                 "type": "string",
-                "format": "uri",
-                "pattern": "^https?://"
+                "pattern": "^https?:\\/\\/"
               },
               "fetchedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
               },
               "provider": {
                 "type": "string",
@@ -595,9 +1062,7 @@
               "readFullPage"
             ],
             "additionalProperties": false
-          },
-          "minItems": 0,
-          "maxItems": 15
+          }
         },
         "layout": {
           "type": "object",
@@ -634,26 +1099,53 @@
           "properties": {
             "createdAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "updatedAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "aliases": {
+              "maxItems": 12,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 80
-              },
-              "minItems": 0,
-              "maxItems": 12
+              }
             },
             "subcards": {
-              "type": "array",
               "maxItems": 24,
+              "type": "array",
               "items": {
-                "$ref": "#/$defs/subcard"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
               }
             }
           },
@@ -661,38 +1153,12 @@
             "createdAt",
             "updatedAt"
           ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "id",
-        "type",
-        "variant",
-        "displayProps",
-        "sourceData",
-        "sources",
-        "layout",
-        "metadata"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
+          "additionalProperties": false,
+          "description": "Subcard IDs must be unique within the parent; enforced by the runtime MetadataSchema."
         },
         "type": {
+          "type": "string",
           "const": "SearchResultCard"
-        },
-        "variant": {
-          "enum": [
-            "minimal",
-            "standard",
-            "expanded"
-          ]
         },
         "displayProps": {
           "type": "object",
@@ -719,9 +1185,41 @@
           "additionalProperties": false
         },
         "sourceData": {
-          "type": "object"
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "variant",
+        "sources",
+        "layout",
+        "metadata",
+        "type",
+        "displayProps",
+        "sourceData"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
         },
         "sources": {
+          "maxItems": 15,
           "type": "array",
           "items": {
             "type": "object",
@@ -732,12 +1230,12 @@
               },
               "url": {
                 "type": "string",
-                "format": "uri",
-                "pattern": "^https?://"
+                "pattern": "^https?:\\/\\/"
               },
               "fetchedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
               },
               "provider": {
                 "type": "string",
@@ -755,9 +1253,7 @@
               "readFullPage"
             ],
             "additionalProperties": false
-          },
-          "minItems": 1,
-          "maxItems": 15
+          }
         },
         "layout": {
           "type": "object",
@@ -794,26 +1290,53 @@
           "properties": {
             "createdAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "updatedAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "aliases": {
+              "maxItems": 12,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 80
-              },
-              "minItems": 0,
-              "maxItems": 12
+              }
             },
             "subcards": {
-              "type": "array",
               "maxItems": 24,
+              "type": "array",
               "items": {
-                "$ref": "#/$defs/subcard"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
               }
             }
           },
@@ -821,54 +1344,31 @@
             "createdAt",
             "updatedAt"
           ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "id",
-        "type",
-        "variant",
-        "displayProps",
-        "sourceData",
-        "sources",
-        "layout",
-        "metadata"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
+          "additionalProperties": false,
+          "description": "Subcard IDs must be unique within the parent; enforced by the runtime MetadataSchema."
         },
         "type": {
+          "type": "string",
           "const": "TableCard"
-        },
-        "variant": {
-          "enum": [
-            "minimal",
-            "standard",
-            "expanded"
-          ]
         },
         "displayProps": {
           "type": "object",
           "properties": {
             "columns": {
+              "minItems": 1,
+              "maxItems": 8,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 80
-              },
-              "minItems": 1,
-              "maxItems": 8
+              }
             },
             "rows": {
+              "maxItems": 100,
               "type": "array",
               "items": {
+                "minItems": 1,
+                "maxItems": 8,
                 "type": "array",
                 "items": {
                   "type": [
@@ -877,12 +1377,8 @@
                     "boolean",
                     "null"
                   ]
-                },
-                "minItems": 1,
-                "maxItems": 8
-              },
-              "minItems": 0,
-              "maxItems": 100
+                }
+              }
             }
           },
           "required": [
@@ -892,9 +1388,41 @@
           "additionalProperties": false
         },
         "sourceData": {
-          "type": "object"
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "variant",
+        "sources",
+        "layout",
+        "metadata",
+        "type",
+        "displayProps",
+        "sourceData"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "expanded"
+          ]
         },
         "sources": {
+          "maxItems": 15,
           "type": "array",
           "items": {
             "type": "object",
@@ -905,12 +1433,12 @@
               },
               "url": {
                 "type": "string",
-                "format": "uri",
-                "pattern": "^https?://"
+                "pattern": "^https?:\\/\\/"
               },
               "fetchedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
               },
               "provider": {
                 "type": "string",
@@ -928,9 +1456,7 @@
               "readFullPage"
             ],
             "additionalProperties": false
-          },
-          "minItems": 0,
-          "maxItems": 15
+          }
         },
         "layout": {
           "type": "object",
@@ -967,26 +1493,53 @@
           "properties": {
             "createdAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "updatedAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "aliases": {
+              "maxItems": 12,
               "type": "array",
               "items": {
                 "type": "string",
                 "maxLength": 80
-              },
-              "minItems": 0,
-              "maxItems": 12
+              }
             },
             "subcards": {
-              "type": "array",
               "maxItems": 24,
+              "type": "array",
               "items": {
-                "$ref": "#/$defs/subcard"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
               }
             }
           },
@@ -994,43 +1547,18 @@
             "createdAt",
             "updatedAt"
           ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "id",
-        "type",
-        "variant",
-        "displayProps",
-        "sourceData",
-        "sources",
-        "layout",
-        "metadata"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
+          "additionalProperties": false,
+          "description": "Subcard IDs must be unique within the parent; enforced by the runtime MetadataSchema."
         },
         "type": {
+          "type": "string",
           "const": "ChartCard"
-        },
-        "variant": {
-          "enum": [
-            "minimal",
-            "standard",
-            "expanded"
-          ]
         },
         "displayProps": {
           "type": "object",
           "properties": {
             "chartKind": {
+              "type": "string",
               "enum": [
                 "line",
                 "bar",
@@ -1038,6 +1566,8 @@
               ]
             },
             "points": {
+              "minItems": 1,
+              "maxItems": 100,
               "type": "array",
               "items": {
                 "type": "object",
@@ -1057,9 +1587,7 @@
                   "y"
                 ],
                 "additionalProperties": false
-              },
-              "minItems": 1,
-              "maxItems": 100
+              }
             },
             "xLabel": {
               "type": "string",
@@ -1077,153 +1605,25 @@
           "additionalProperties": false
         },
         "sourceData": {
-          "type": "object"
-        },
-        "sources": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "title": {
-                "type": "string",
-                "maxLength": 500
-              },
-              "url": {
-                "type": "string",
-                "format": "uri",
-                "pattern": "^https?://"
-              },
-              "fetchedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "provider": {
-                "type": "string",
-                "maxLength": 80
-              },
-              "readFullPage": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "title",
-              "url",
-              "fetchedAt",
-              "provider",
-              "readFullPage"
-            ],
-            "additionalProperties": false
-          },
-          "minItems": 0,
-          "maxItems": 15
-        },
-        "layout": {
           "type": "object",
-          "properties": {
-            "x": {
-              "type": "number"
-            },
-            "y": {
-              "type": "number"
-            },
-            "width": {
-              "type": "number",
-              "minimum": 80
-            },
-            "height": {
-              "type": "number",
-              "minimum": 56
-            },
-            "pinned": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "x",
-            "y",
-            "width",
-            "height",
-            "pinned"
-          ],
-          "additionalProperties": false
-        },
-        "metadata": {
-          "type": "object",
-          "properties": {
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "updatedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "aliases": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "maxLength": 80
-              },
-              "minItems": 0,
-              "maxItems": 12
-            },
-            "subcards": {
-              "type": "array",
-              "maxItems": 24,
-              "items": {
-                "$ref": "#/$defs/subcard"
-              }
-            }
-          },
-          "required": [
-            "createdAt",
-            "updatedAt"
-          ],
-          "additionalProperties": false
+          "properties": {},
+          "additionalProperties": {}
         }
       },
       "required": [
         "id",
-        "type",
         "variant",
-        "displayProps",
-        "sourceData",
         "sources",
         "layout",
-        "metadata"
+        "metadata",
+        "type",
+        "displayProps",
+        "sourceData"
       ],
       "additionalProperties": false
     }
   ],
-  "$defs": {
-    "subcard": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
-        "itemId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
-        "anchor": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "text": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2000
-        }
-      },
-      "required": [
-        "id",
-        "text"
-      ],
-      "additionalProperties": false
-    }
-  }
+  "$id": "https://vivic.local/contracts/card-record.schema.json",
+  "title": "Vivic CardRecord v0.6",
+  "description": "Generated from @vivic/contracts. Closed display fields; pure timers render digits, named reminders render their validated task and time. Runtime Zod remains required for semantic and identity checks."
 }

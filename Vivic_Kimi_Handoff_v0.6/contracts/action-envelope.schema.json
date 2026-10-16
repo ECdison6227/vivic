@@ -1,11 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://vivic.local/contracts/action-envelope.schema.json",
-  "title": "Vivic ActionEnvelope v0.6",
-  "description": "All actions are closed. card.update.displayProps requires per-type CardRegistry validation before application. card.update.variant is optional (minimal/standard/expanded); the execution boundary allows density updates for NoteCard targets only.",
   "type": "object",
   "properties": {
     "schemaVersion": {
+      "type": "string",
       "const": "0.6"
     },
     "requestId": {
@@ -23,6 +21,8 @@
       "maxLength": 180
     },
     "actions": {
+      "minItems": 1,
+      "maxItems": 12,
       "type": "array",
       "items": {
         "oneOf": [
@@ -30,6 +30,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "stage.awaken"
               }
             },
@@ -42,10 +43,11 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "card.create"
               },
               "card": {
-                "$ref": "card-record.schema.json"
+                "$ref": "https://vivic.local/contracts/card-record.schema.json"
               }
             },
             "required": [
@@ -58,6 +60,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "card.delete"
               },
               "targetId": {
@@ -76,6 +79,32 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
+                "const": "cards.delete"
+              },
+              "targetIds": {
+                "minItems": 1,
+                "maxItems": 1000,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "type",
+              "targetIds"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "card.focus"
               },
               "targetId": {
@@ -94,6 +123,81 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
+                "const": "card.subcard.set"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "subcard": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "targetId",
+              "subcard"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "card.subcard.delete"
+              },
+              "targetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "subcardId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "type",
+              "targetId",
+              "subcardId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "card.highlight"
               },
               "targetId": {
@@ -122,6 +226,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "card.update"
               },
               "targetId": {
@@ -129,18 +234,23 @@
                 "minLength": 1,
                 "maxLength": 128
               },
-              "displayProps": {
-                "type": "object"
-              },
               "variant": {
+                "type": "string",
                 "enum": [
                   "minimal",
                   "standard",
                   "expanded"
                 ]
               },
+              "displayProps": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
               "sourceData": {
-                "type": "object"
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
               }
             },
             "required": [
@@ -153,6 +263,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "canvas.fit"
               }
             },
@@ -165,6 +276,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "canvas.restore"
               }
             },
@@ -177,6 +289,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "canvas.switch"
               },
               "canvasId": {
@@ -195,6 +308,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "canvas.create"
               },
               "canvasId": {
@@ -219,9 +333,11 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "ambient.setPreset"
               },
               "preset": {
+                "type": "string",
                 "enum": [
                   "grainient",
                   "clouds",
@@ -229,6 +345,7 @@
                 ]
               },
               "theme": {
+                "type": "string",
                 "enum": [
                   "auto",
                   "light",
@@ -246,22 +363,24 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "subtitle.show"
               },
               "text": {
                 "type": "string",
                 "maxLength": 120
               },
-              "durationMs": {
-                "type": "integer",
-                "minimum": 300,
-                "maximum": 12000
-              },
               "priority": {
+                "type": "string",
                 "enum": [
                   "normal",
                   "reminder"
                 ]
+              },
+              "durationMs": {
+                "type": "integer",
+                "minimum": 300,
+                "maximum": 12000
               }
             },
             "required": [
@@ -274,6 +393,7 @@
             "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "subtitle.hide"
               }
             },
@@ -281,57 +401,9 @@
               "type"
             ],
             "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "card.subcard.set"
-              },
-              "targetId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128
-              },
-              "subcard": {
-                "$ref": "card-record.schema.json#/$defs/subcard"
-              }
-            },
-            "required": [
-              "type",
-              "targetId",
-              "subcard"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "const": "card.subcard.delete"
-              },
-              "targetId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128
-              },
-              "subcardId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128
-              }
-            },
-            "required": [
-              "type",
-              "targetId",
-              "subcardId"
-            ],
-            "additionalProperties": false
           }
         ]
-      },
-      "minItems": 1,
-      "maxItems": 12
+      }
     }
   },
   "required": [
@@ -340,5 +412,8 @@
     "canvasId",
     "actions"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$id": "https://vivic.local/contracts/action-envelope.schema.json",
+  "title": "Vivic ActionEnvelope v0.6",
+  "description": "Generated from @vivic/contracts. card.update merges must be revalidated against the target card type. Target existence, ownership, data provenance and runtime refinements remain required."
 }
