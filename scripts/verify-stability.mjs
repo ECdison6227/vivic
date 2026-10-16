@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Isolated production-snapshot stress runner. No application test hooks,
- * provider calls, microphone, audio playback, Playwright config or shared ports. */
+ * provider calls, microphone, audio playback, or the user's service ports. */
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
@@ -64,15 +64,15 @@ if (opts["analyze-run"]) {
   process.exit(0);
 }
 if (opts.help !== undefined) {
-  console.log("node scripts/verify-stability.mjs [--focused] [--no-video] [--duration-minutes=30] [--sample-seconds=60] [--browser=chromium] [--port=5190] [--analyze-run=evidence/phase3-stability/RUN]");
+  console.log("node scripts/verify-stability.mjs [--focused] [--no-video] [--duration-minutes=30] [--sample-seconds=60] [--browser=chromium] [--port=5174] [--analyze-run=evidence/phase3-stability/RUN]");
   process.exit(0);
 }
 const focused = opts.focused !== undefined;
 const recordVideo = opts["no-video"] === undefined;
 const minutes = Number(opts["duration-minutes"] ?? (focused ? 1 : 30)), sampleSeconds = Number(opts["sample-seconds"] ?? 60);
-const port = Number(opts.port ?? 5190), browserName = opts.browser ?? "chromium";
+const port = Number(opts.port ?? 5174), browserName = opts.browser ?? "chromium";
 assert(minutes > 0 && Number.isFinite(minutes)); assert(sampleSeconds >= 5 && sampleSeconds <= 60);
-assert.equal(port, 5190, "This task reserves only port 5190; do not change shared service ports.");
+assert([5174, 5190].includes(port), "Use a reserved test port, never the user's 5173/8787 services.");
 assert(["chromium", "firefox", "webkit"].includes(browserName));
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const out = join(root, "evidence/phase3-stability", `${stamp}-${browserName}`);

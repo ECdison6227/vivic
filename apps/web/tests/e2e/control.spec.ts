@@ -31,17 +31,37 @@ test("Scenario 1: minimal countdown via text commands", async ({ browser }) => {
   expect(digits).toMatch(/^[\d:\s]+$/); // no labels around the digits
   await B.screenshot({ path: path.join(EVIDENCE1, "display-countdown-command.png") });
 
-  // Focus via command: camera moves, card text unchanged.
+  // A single card already at the center may legitimately keep its camera.
+  // Pan the real viewport first so this scenario tests an actual focus move.
   const transform = () =>
     B.locator(".react-flow__viewport").evaluate(
       (el) => (el as HTMLElement).style.transform,
     );
+  await expect.poll(async () => {
+    const box = await countdown.boundingBox();
+    return box ? Math.abs(box.x + box.width / 2 - B.viewportSize()!.width / 2) : Infinity;
+  }).toBeLessThan(2);
+  const centered = await transform();
+  await B.mouse.move(80, 80);
+  await B.mouse.down();
+  await B.mouse.move(260, 200, { steps: 10 });
+  await B.mouse.up();
+  await expect.poll(transform).not.toBe(centered);
   const before = await transform();
+  const record = await B.evaluate(() => window.__vivic!.getState().cards[0]!.record);
   await sendCommand(A, "放大倒计时");
-  await B.waitForTimeout(1200);
-  expect(await transform()).not.toBe(before);
+  await expect(countdown).toHaveAttribute("data-focused", "true");
+  await expect.poll(transform).not.toBe(before);
+  await expect.poll(async () => {
+    const box = await countdown.boundingBox();
+    return box ? Math.abs(box.x + box.width / 2 - B.viewportSize()!.width / 2) : Infinity;
+  }).toBeLessThan(2);
+  expect(await B.evaluate(() => window.__vivic!.getState().cards[0]!.record)).toEqual(record);
   // Card text unchanged in kind (digit-only); the value keeps ticking.
   expect(((await countdown.textContent()) ?? "").trim()).toMatch(/^[\d:\s]+$/);
+
+  await sendCommand(A, "恢复原视图");
+  await expect.poll(transform).toBe(before);
 
   // 删除这个 + confirm-free unique hit, then 撤销 restores. No duplicates.
   await sendCommand(A, "删除这个");

@@ -8,7 +8,7 @@
 node scripts/verify-stability.mjs
 ```
 
-默认 Chromium、真实 30 分钟 soak、每 60 秒采样、`127.0.0.1:5190`。脚本直接调用已安装 Playwright 的浏览器 API，不加载 Playwright 项目配置，不启动其 webServer，也不访问或清理 5173/5174/8787/8788。
+当前默认 Chromium、真实 30 分钟 soak、每 60 秒采样、`127.0.0.1:5174`；历史运行使用 5190，仍可显式选择。脚本直接调用已安装 Playwright 的浏览器 API，不加载项目配置或 webServer，不访问/清理用户 5173/8787。必须与其他使用 5174/8788 的浏览器命令串行运行。
 
 `--no-video` 关闭完整 session 录屏，保留截图与采样，并记录 `recordVideo:false`。仍有采样/浏览器开销，不代表无测量开销的硬件 GPU 基准。
 
@@ -19,7 +19,7 @@ node scripts/verify-stability.mjs
 - 静态服务对 `/api/*` 返回明确标记的 HTTP 503 backend offline。规则解析在浏览器执行；不调用真实后端、Key、模型、搜索或音频服务。其它 origin 请求被隔离 context 拦截。
 - 浏览器独立无持久 profile、permissions 为空、静音，getUserMedia 与音频播放另有只存在于测试 context 的拒绝/静音护栏。不授权麦克风，不启用自动语音。
 - 每次先运行 web typecheck，成功后 Vite production build 到操作系统临时目录。保留 asset SHA-256 manifest、typecheck/build 日志和浏览器版本；不覆盖 `apps/web/dist`。
-- 退出时关闭本脚本 context/browser/server 并删除它自己的临时 snapshot，证据与视频保留。5190 被占用时失败退出，不终止占用者。
+- 退出时关闭本脚本 context/browser/server 并删除它自己的临时 snapshot，证据与视频保留。所选测试端口被占用时失败退出，不终止占用者。
 
 ## 覆盖与计时
 

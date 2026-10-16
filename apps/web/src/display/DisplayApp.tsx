@@ -17,12 +17,12 @@ declare global {
 }
 
 const params = new URLSearchParams(window.location.search);
-const isDevPanel = params.get("dev") === "1";
+const isDevPanel = import.meta.env.DEV && params.get("dev") === "1";
 const pinnedCanvasId = params.get("canvasId") ?? undefined;
 
 /**
  * /display — stage only. No nav, no settings entry, no chrome
- * (AGENTS.md §1.4). The ?dev=1 panel never ships on plain /display.
+ * (AGENTS.md §1.4). The ?dev=1 panel is restricted to development builds.
  */
 export const DisplayApp = () => {
   useEffect(() => {

@@ -54,7 +54,10 @@ test("native AudioWorklet records WAV, transcribes into review, then uses the sh
   await page.locator('[data-vivic-command-send]').click();
   await expect(page.locator('[data-vivic-reminder-text]')).toHaveText("喝水");
   await expect(display.locator('[data-card-id]')).toHaveCount(1);
-  await expect(display.locator('[data-card-id]')).toHaveText(/^[\d:\s]+$/);
+  const reminder = display.locator('[data-vivic-reminder-row]');
+  await expect(reminder).toHaveCount(1);
+  await expect(reminder).toContainText("喝水");
+  await expect(reminder.locator(".vivic-reminder-time")).toHaveText(/^\d{2}:\d{2}$/);
   await display.close();
 });
 
