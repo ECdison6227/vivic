@@ -101,5 +101,14 @@
     "Reminder chime uses the default system output; speech output selection belongs to TTS.",
     "Server restart still clears the StepFun memory credential.",
     "No phase-two deployment, invitation system, multi-user or mobile pairing has been added."
-  ]
+  ],
+  "visualReminderCheck": {
+    "passed": true,
+    "captionOpacity": 1,
+    "glowOpacity": 1,
+    "remainingReminderRows": 3,
+    "screenshot": "evidence/user-feedback-20261016-final/reminder-steady.png",
+    "report": "evidence/user-feedback-20261016-final/reminder-steady.json",
+    "note": "Waited for both caption and glow to finish entering before visual review; no audio playback."
+  }
 }
