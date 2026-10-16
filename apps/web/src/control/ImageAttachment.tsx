@@ -83,7 +83,7 @@ export function ImageAttachment({ disabled = false, ownerKey, resetKey, onChange
       void select(files);
     }}>
     <div className="flex items-center gap-2">
-      <Input ref={input} id={id} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={disabled}
+      <Input ref={input} id={id} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only w-px! h-px! p-0!" disabled={disabled}
         aria-label="选择图片附件" onChange={event => {
           const files = Array.from(event.target.files ?? []); event.target.value = "";
           if (files.length) void select(files);

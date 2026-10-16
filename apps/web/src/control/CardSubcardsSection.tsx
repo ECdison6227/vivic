@@ -11,6 +11,7 @@ import { TargetBadge } from "@/cards/TargetBadge";
 import { Button } from "@/components/ui/button";
 import { newId } from "@/lib/id";
 import type { ControlHost } from "@/sync/controlHost";
+import { CardDetailsReader, ReadDetailsButton } from "./CardDetailsDialog";
 
 export const CardSubcardsSection = ({ host }: { host: ControlHost }) => {
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
@@ -32,15 +33,16 @@ export const CardSubcardsSection = ({ host }: { host: ControlHost }) => {
     return host.dispatch({ schemaVersion: "0.6", requestId: newId("subcard"), canvasId: current.activeCanvasId, actions: [action] }).ok;
   } }), [host, editable, snapshot.activeCanvasId]);
   const visible = cards.filter(c => !c.exitingRequestId && !completedCountdown(c));
-  return <section className="rounded-xl border border-neutral-200 bg-white p-4" data-vivic-card-subcards>
+  return <CardDetailsReader><section className="rounded-xl border border-neutral-200 bg-white p-4" data-vivic-card-subcards>
     <h2 className="text-sm font-semibold">卡片与子卡片</h2>
     <p className="mt-2 text-xs text-neutral-500">打开卡片，在对应行旁添加扩充；展示端可沿箭头阅读。</p>
     <SubcardEditorContext.Provider value={context} key={`${snapshot.activeCanvasId}:${snapshot.ownerMode}`}>
       <Accordion.Root type="single" collapsible className="mt-3">
         {visible.map(({ record }) => <Accordion.Item key={record.id} value={record.id} className="border-b border-neutral-100 last:border-0" data-vivic-inspect-card={record.id}>
-          <Accordion.Header><Accordion.Trigger data-vivic-inspect-toggle className="flex w-full items-center gap-2 py-3 text-left text-sm focus-visible:outline-2">
+          <div className="flex items-center gap-2"><Accordion.Header className="min-w-0 flex-1"><Accordion.Trigger data-vivic-inspect-toggle className="flex w-full items-center gap-2 py-3 text-left text-sm focus-visible:outline-2">
             <span className="vivic-inspect-number"><TargetBadge cardId={record.id} /></span><span className="min-w-0 flex-1 break-words line-clamp-2">{cardTitle(record)}</span>
             <ChevronDown size={16} className="shrink-0" /></Accordion.Trigger></Accordion.Header>
+            <ReadDetailsButton card={record} /></div>
           <Accordion.Content className="pb-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <SubcardAnchor card={record}>整张卡片的扩充</SubcardAnchor>
@@ -68,5 +70,5 @@ export const CardSubcardsSection = ({ host }: { host: ControlHost }) => {
     {!visible.length && <p className="mt-3 text-xs text-neutral-500">当前画布暂无卡片</p>}
     <p className="mt-2 text-xs text-neutral-500">删除提醒或卡片后，输入「撤销」即可恢复。</p>
     {error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}
-  </section>;
+  </section></CardDetailsReader>;
 };

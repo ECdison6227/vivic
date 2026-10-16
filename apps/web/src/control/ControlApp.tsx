@@ -23,6 +23,7 @@ import { cancelVoiceInput, getVoiceInputSnapshot, isVoiceInputBusy, subscribeVoi
 import { LocalSpeechSettings } from "./LocalSpeechSettings";
 import { CanvasSettings } from "./CanvasSettings";
 import { CardSubcardsSection } from "./CardSubcardsSection";
+import { QuickFind } from "./QuickFind";
 import type { Attachment } from "@/ai/attachments";
 import { startsNewInstruction } from "@vivic/contracts";
 
@@ -523,11 +524,9 @@ const ControlShell = (props: ShellProps) => {
       data-vivic-active-canvas={snap.activeCanvasId ?? ""}
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-5 px-5 py-8">
-        <header className="flex items-baseline justify-between">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-lg font-semibold tracking-tight">Vivic 控制端</h1>
-          <span className="text-xs text-neutral-500">
-            文字指令 · 提醒 · 画布管理
-          </span>
+          <QuickFind host={props.host} />
         </header>
 
         {readonly && (
@@ -595,7 +594,7 @@ const ControlShell = (props: ShellProps) => {
           readonly={readonly}
         />
         <CanvasSettings host={props.host} disabled={readonly || !snap.ready} />
-        <CardSubcardsSection host={props.host} />
+        <CardSubcardsSection key={`${snap.activeCanvasId}:${snap.ownerMode}:${snap.ownerId}:${snap.ready}`} host={props.host} />
         <LocalDecisionSettings disabled={readonly || !snap.ready} />
 
         <RemindersSection host={props.host} readonly={readonly} />

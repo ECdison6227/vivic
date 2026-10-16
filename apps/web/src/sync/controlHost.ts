@@ -54,6 +54,9 @@ export interface ControlSnapshot {
   preferences: DisplayPreferences;
   ready: boolean;
   ownerMode: OwnerMode;
+  /** Existing owner broadcasts identify the UI reading session, including
+   * readonly windows whose mode stays unchanged during a takeover. */
+  ownerId: string | null;
   canvases: CanvasMeta[];
   activeCanvasId: string | null;
   reminders: ReminderSummary[];
@@ -122,6 +125,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
   let reminderError: string | null = null;
   let ownerResyncing = false;
   let sessionEpoch = instanceId;
+  let observedOwnerId: string | null = null;
   const now = deps.now ?? Date.now;
   let preferences: DisplayPreferences = { ...DEFAULT_DISPLAY_PREFERENCES };
   let persistedPreferences = preferences;
@@ -153,6 +157,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
     preferences,
     ready: false,
     ownerMode: "readonly",
+    ownerId: null,
     canvases: [],
     activeCanvasId: null,
     reminders: [],
@@ -165,6 +170,7 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
       preferences,
       ready: ready && !ownerResyncing && !clearingLocalData,
       ownerMode: owner.mode(),
+      ownerId: owner.mode() === "owner" ? instanceId : observedOwnerId,
       canvases: [...records.values()]
         .map(({ id, title, version, updatedAt }) => ({
           id,
@@ -320,6 +326,15 @@ export const createControlHost = (deps: ControlHostDeps): ControlHost => {
 
   const unsubscribeChannel = deps.channel.subscribe((msg) => {
     if (stopped) return;
+    if (msg.type === "owner") {
+      const next = msg.payload.status === "off"
+        ? (observedOwnerId === msg.payload.ownerId ? null : observedOwnerId)
+        : msg.payload.ownerId;
+      if (next !== observedOwnerId) { observedOwnerId = next; emit(); }
+    }
+    if (msg.type === "snapshot" && msg.payload.ownerId && msg.payload.ownerId !== observedOwnerId) {
+      observedOwnerId = msg.payload.ownerId; emit();
+    }
     if (msg.type === "local-data-reset" && owner.mode() === "readonly") {
       deps.onLocalDataReset?.();
       void refreshOwnerState(true);

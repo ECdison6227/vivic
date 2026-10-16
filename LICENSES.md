@@ -15,6 +15,10 @@
 | **@xyflow/react**（React Flow） | 无限画布 pan/zoom/focus/拖动 | https://reactflow.dev/ | npm 依赖 | **12.12.0** | **MIT**（包内 LICENSE；分发保留版权与许可） |
 | **Motion** | Orb/遮罩/字幕/布局动效 | https://motion.dev/ | npm 依赖 | **14.2.0**（motion-dom 14.2.0, motion-utils 14.1.1） | **MIT** |
 
+## 本轮体验增量（2026-10-16）
+
+`cmdk@1.1.1`（https://github.com/pacocoursey/cmdk）和 `pinyin-match@1.2.10`（https://github.com/xmflswood/pinyin-match）均来自 npm 精确版本，包内 MIT 许可全文保留在 [第三方许可](docs/third-party/experience/)。shadcn radix-nova Command registry 源码（2026-10-16）接入现有 Radix Dialog、Lucide 和主题，MIT 全文同目录保留。原始 registry 与所用发行文件 SHA256、适配范围见 [本次说明](docs/experience-20261016.md)。未复用 HARK 私有实现或字体。
+
 ## UI 基础与支撑依赖
 
 | 组件 | 用途 | 来源 | 版本 | 许可证 |
