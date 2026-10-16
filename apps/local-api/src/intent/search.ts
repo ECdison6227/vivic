@@ -16,11 +16,22 @@ export const searchQuery = (text: string): string | null => {
   const match = raw.match(/^(?:请帮我|请|帮我)?\s*(?:搜索|搜一下|搜一搜|搜|查找|查一下|查一查|查查|查询|查)\s*(.+)$/);
   return match?.[1]?.trim() || null;
 };
+
+/** Without any model, a plainly informational question is looked up instead of
+ * refused. Anything touching the canvas or mixing instructions is left alone. */
+export const offlineSearchQuery = (text: string): string | null => {
+  const raw = text.trim();
+  if (raw.length < 2 || raw.length > 120) return null;
+  if (/卡片|便笺|便签|笔记|待办|提醒|倒计时|计时|闹钟|删除|聚焦|放大|缩小|创建|添加|新建|画布|显示|隐藏|恢复|撤销|展开|收起|固定|移动|整理|然后|同时|顺便|并且|不要|不用|[；;\n]/.test(raw)) return null;
+  if (!/新闻|最新|最近|近况|消息|动态|行情|股价|股市|大盘|收盘|汇率|油价|金价|价格|多少钱|票价|比分|赛程|赛果|上映|发布会?|是什么|是谁|什么是|怎么样|哪些|哪个|哪家|有什么|介绍一下|百科|官网|攻略|排名|榜单/.test(raw)) return null;
+  const query = raw.replace(/^(?:请问|我想知道|想知道|告诉我|你知道)\s*/, "").replace(/[吗呢呀啊吧]?\s*[？?。!！]*$/, "").trim();
+  return query.length >= 2 ? query : null;
+};
 const textOnly = (text: string, max: number) => text.replace(/<[^>]*>/g, " ").replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, max);
 
 /** The tool's citations remain data. No webpage text is interpreted as actions
  * or forwarded to a model, and no claim of full-page reading is made. */
-export const buildSearchEnvelope = (query: string, ctx: CanvasContext, results: SearchEvidence[], summary?: SearchSummary) => {
+export const buildSearchEnvelope = (query: string, ctx: CanvasContext, results: SearchEvidence[], summary?: SearchSummary, fallbackNote?: string) => {
   const countMatch = query.match(/([一二两三四五六七八九十\d]+)\s*(?:个|款|种|家|条|篇)/);
   const count = Math.min(5, Math.max(1, (countMatch ? chineseNumber(countMatch[1]!) : null) ?? 3));
   const unique = new Set<string>();
@@ -53,7 +64,7 @@ export const buildSearchEnvelope = (query: string, ctx: CanvasContext, results: 
     } };
   });
   return ActionEnvelopeSchema.parse({ schemaVersion: "0.6", requestId: `search_${randomUUID()}`,
-    canvasId: ctx.canvasId, spokenText: `已整理 ${items.length} 条结果`,
+    canvasId: ctx.canvasId, spokenText: fallbackNote ? `${fallbackNote}，整理了 ${items.length} 条结果` : `已整理 ${items.length} 条结果`,
     actions: [...(ctx.stage === "STANDBY" ? [{ type: "stage.awaken" }] : []), ...actions, { type: "canvas.fit" }],
   });
 };

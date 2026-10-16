@@ -71,26 +71,92 @@ const readWindowsSystemProxy = (): string | undefined => {
   }
 };
 
-export type ProxySource = "VIVIC_OPENAI_PROXY" | "env" | "system";
+/** `scutil --proxy` prints the active macOS network service's proxy dictionary. */
+export const parseMacProxy = (output: string): string | undefined => {
+  const value = (name: string) => new RegExp(`^\\s*${name}\\s*:\\s*(\\S+)\\s*$`, "m").exec(output)?.[1];
+  for (const scheme of ["HTTPS", "HTTP"]) {
+    const host = value(`${scheme}Proxy`);
+    const port = value(`${scheme}Port`);
+    if (value(`${scheme}Enable`) === "1" && host) return withScheme(port ? `${host}:${port}` : host);
+  }
+  return undefined;
+};
+
+const readMacSystemProxy = (): string | undefined => {
+  try {
+    return parseMacProxy(execFileSync("scutil", ["--proxy"], { encoding: "utf8", timeout: 3000 }));
+  } catch {
+    return undefined;
+  }
+};
+
+/** Linux desktops publish their proxy through the environment, covered by `env`. */
+export const readSystemProxy = (): string | undefined =>
+  process.platform === "win32" ? readWindowsSystemProxy()
+    : process.platform === "darwin" ? readMacSystemProxy() : undefined;
+
+export type ProxySource = "VIVIC_OPENAI_PROXY" | "VIVIC_SEARCH_PROXY" | "env" | "system";
 export interface ResolvedProxy { url: string; source: ProxySource }
 
-/** `VIVIC_OPENAI_PROXY=direct` opts out; otherwise explicit > env > system. */
-export const resolveOpenAIProxy = (
+/** The proxy the user's browser would use: environment first, then the OS. */
+export const resolveAmbientProxy = (
   env: NodeJS.ProcessEnv,
-  readSystem: () => string | undefined = readWindowsSystemProxy,
+  readSystem: () => string | undefined = readSystemProxy,
 ): ResolvedProxy | undefined => {
-  const explicit = env.VIVIC_OPENAI_PROXY?.trim();
-  if (explicit && /^(direct|off|none)$/i.test(explicit)) return undefined;
-  if (explicit) {
-    const url = withScheme(explicit);
-    return url ? { url, source: "VIVIC_OPENAI_PROXY" } : undefined;
-  }
   for (const name of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) {
     const url = env[name] ? withScheme(env[name]!) : undefined;
     if (url) return { url, source: "env" };
   }
   const system = readSystem();
   return system ? { url: system, source: "system" } : undefined;
+};
+
+/** `direct|off|none` opts out, `auto`/unset follows env > system, anything else is a proxy URL. */
+const resolveWithOverride = (
+  override: string | undefined, source: ProxySource, env: NodeJS.ProcessEnv, readSystem: () => string | undefined,
+): ResolvedProxy | undefined => {
+  const explicit = override?.trim();
+  if (explicit && /^(direct|off|none)$/i.test(explicit)) return undefined;
+  if (explicit && !/^auto$/i.test(explicit)) {
+    const url = withScheme(explicit);
+    return url ? { url, source } : undefined;
+  }
+  return resolveAmbientProxy(env, readSystem);
+};
+
+/** `VIVIC_OPENAI_PROXY=direct` opts out; otherwise explicit > env > system. */
+export const resolveOpenAIProxy = (
+  env: NodeJS.ProcessEnv,
+  readSystem: () => string | undefined = readSystemProxy,
+): ResolvedProxy | undefined => resolveWithOverride(env.VIVIC_OPENAI_PROXY, "VIVIC_OPENAI_PROXY", env, readSystem);
+
+/**
+ * Egress for the fixed keyless search endpoint only. Never for user/model
+ * supplied page URLs: a proxy resolves names itself and would bypass the
+ * pinned public-address check that guards /api/fetch.
+ */
+export const resolveSearchProxy = (
+  setting: string | undefined,
+  env: NodeJS.ProcessEnv,
+  readSystem: () => string | undefined = readSystemProxy,
+): ResolvedProxy | undefined => resolveWithOverride(setting, "VIVIC_SEARCH_PROXY", env, readSystem);
+
+/** Re-read periodically so turning a proxy app on/off needs no restart. */
+export const cachedProxy = (resolve: () => ResolvedProxy | undefined, ttlMs = SYSTEM_PROXY_TTL_MS) => {
+  let cached: { at: number; value: ResolvedProxy | undefined } | undefined;
+  return (): ResolvedProxy | undefined => {
+    const now = Date.now();
+    if (!cached || now - cached.at >= ttlMs) cached = { at: now, value: resolve() };
+    return cached.value;
+  };
+};
+
+const proxyAgents = new Map<string, Dispatcher>();
+/** One tunnel pool per proxy URL, with the connect-phase retry described above. */
+export const proxyDispatcher = (url: string): Dispatcher => {
+  let agent = proxyAgents.get(url);
+  if (!agent) { agent = new ProxyAgent(url).compose(interceptors.retry(CONNECT_RETRY)); proxyAgents.set(url, agent); }
+  return agent;
 };
 
 /** Never log proxy credentials. */
@@ -105,23 +171,17 @@ export const redactProxy = (url: string): string => {
 
 export class OpenAIEgressDispatcher extends Dispatcher {
   readonly #direct: Dispatcher;
-  readonly #resolve: () => ResolvedProxy | undefined;
-  readonly #ttlMs: number;
+  readonly #current: () => ResolvedProxy | undefined;
   readonly #agents = new Map<string, Dispatcher>();
-  #cached: { at: number; value: ResolvedProxy | undefined } | undefined;
 
   constructor(options: { resolve: () => ResolvedProxy | undefined; direct?: Dispatcher; ttlMs?: number }) {
     super();
-    this.#resolve = options.resolve;
     this.#direct = options.direct ?? new Agent();
-    this.#ttlMs = options.ttlMs ?? SYSTEM_PROXY_TTL_MS;
+    this.#current = cachedProxy(options.resolve, options.ttlMs);
   }
 
-  /** Re-read periodically so turning a proxy app on/off needs no restart. */
   current(): ResolvedProxy | undefined {
-    const now = Date.now();
-    if (!this.#cached || now - this.#cached.at >= this.#ttlMs) this.#cached = { at: now, value: this.#resolve() };
-    return this.#cached.value;
+    return this.#current();
   }
 
   route(origin: string | URL | undefined): Dispatcher {

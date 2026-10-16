@@ -1,5 +1,7 @@
 import { request } from "node:https";
 import { isIP } from "node:net";
+import { fetch as undiciFetch } from "undici";
+import { proxyDispatcher } from "../openaiProxy.js";
 import { SearchError } from "./errors.js";
 import { blockedUrl, isPublicAddress, publicHttpsUrl } from "./policy.js";
 import { resolvePublicAddresses } from "./publicDns.js";
@@ -96,4 +98,56 @@ export async function requestPublicHttps(raw: string, options: {
     req.on("error", error => reject(signal.aborted ? abortError(signal) : error));
     req.end(options.body);
   });
+}
+
+type RequestOptions = Omit<Parameters<typeof requestPublicHttps>[1], "publicDnsFallback">;
+
+/**
+ * Fixed, trusted provider endpoints only (never a page URL from a user or
+ * model): the proxy resolves the host itself, so the pinned public-address
+ * check above cannot apply. Same size, type and encoding limits.
+ */
+export async function requestViaProxy(raw: string, proxyUrl: string, options: RequestOptions): Promise<HttpsReply> {
+  const { signal, maxBytes } = options;
+  if (signal.aborted) throw abortError(signal);
+  const url = publicHttpsUrl(raw);
+  let res: Awaited<ReturnType<typeof undiciFetch>>;
+  try {
+    res = await undiciFetch(url, {
+      method: options.method ?? "GET", body: options.body, redirect: "manual", signal,
+      dispatcher: proxyDispatcher(proxyUrl),
+      headers: { "User-Agent": "Vivic-Search-PoC/0.6", "Accept-Encoding": "identity", ...options.headers },
+    });
+  } catch (error) {
+    throw signal.aborted ? abortError(signal) : error;
+  }
+  const status = res.status;
+  const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  const location = res.headers.get("location") ?? undefined;
+  const fail = async (error: SearchError) => { await res.body?.cancel().catch(() => {}); throw error; };
+  if (status < 200 || status >= 300) {
+    await res.body?.cancel().catch(() => {});
+    return { status, contentType, location, body: Buffer.alloc(0) };
+  }
+  if (!options.acceptContentType(contentType)) return fail(new SearchError("search-unsupported-content", "网页响应不是支持的文本类型。", 415));
+  const encoding = res.headers.get("content-encoding");
+  if (encoding && encoding !== "identity") return fail(new SearchError("search-unsupported-content", "不接受压缩网页响应。", 415));
+  const length = res.headers.get("content-length");
+  if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) return fail(new SearchError("search-too-large", "网页响应超过大小限制。", 413));
+  if (!res.body) return { status, contentType, location, body: Buffer.alloc(0) };
+  const reader = res.body.getReader();
+  const chunks: Buffer[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) { await reader.cancel().catch(() => {}); throw new SearchError("search-too-large", "网页响应超过大小限制。", 413); }
+      chunks.push(Buffer.from(value));
+    }
+  } catch (error) {
+    throw signal.aborted ? abortError(signal) : error;
+  }
+  return { status, contentType, location, body: Buffer.concat(chunks) };
 }

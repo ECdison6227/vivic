@@ -3,10 +3,11 @@
  * Source commit d47dc040552505e3b135d0136a0b15eaf4bdba52; see PROVENANCE.md.
  * Retains the upstream tools/call request, SSE/JSON decoding and text-block parser.
  * Changes: fixed basic tool; bounded pinned HTTPS transport; safe errors; explicit
- * HTTP-200 quota detection. No config, credential resolution, Pi runtime or fallback.
+ * HTTP-200 quota detection; optional proxy egress for this fixed endpoint. No config,
+ * credential resolution, Pi runtime or provider fallback.
  */
 import { SearchError } from "../errors.js";
-import { requestPublicHttps, type HttpsReply } from "../transport.js";
+import { abortError, requestPublicHttps, requestViaProxy, type HttpsReply } from "../transport.js";
 
 export const EXA_MCP_URL = "https://mcp.exa.ai/mcp?tools=web_search_exa";
 const EXA_MCP_BASIC_TOOL = "web_search_exa";
@@ -24,12 +25,14 @@ interface ExaMcpRpcResponse {
 const invalidResponse = () => new SearchError("search-invalid-response", "搜索源未返回有效的来源列表。", 502);
 const rateLimited = () => new SearchError("search-rate-limited", "搜索源免费额度暂时受限，请稍后重试。", 429);
 
-export async function callExaMcp(query: string, numResults: number, signal: AbortSignal, maxBytes: number, publicDnsFallback = false): Promise<string> {
+// A desktop proxy may stall its first tunnel; leave the rest for a direct try.
+const PROXY_ATTEMPT_MS = 15_000;
+
+export async function callExaMcp(query: string, numResults: number, signal: AbortSignal, maxBytes: number, publicDnsFallback = false, proxyUrl?: string): Promise<string> {
   const toolName = EXA_MCP_BASIC_TOOL;
   const args = { query, numResults };
-  let response: HttpsReply;
-  try { response = await requestPublicHttps(EXA_MCP_URL, {
-    method: "POST",
+  const request = {
+    method: "POST" as const,
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json, text/event-stream",
@@ -41,9 +44,18 @@ export async function callExaMcp(query: string, numResults: number, signal: Abor
       method: "tools/call",
       params: { name: toolName, arguments: args },
     }),
-    signal, maxBytes, publicDnsFallback,
-    acceptContentType: type => type === "application/json" || type === "text/event-stream",
-  }); } catch (error) {
+    maxBytes,
+    acceptContentType: (type: string) => type === "application/json" || type === "text/event-stream",
+  };
+  let response: HttpsReply | undefined;
+  // Vivic: the fixed endpoint may only be reachable through the user's proxy
+  // (corporate network, desktop proxy app). Any transport failure there falls
+  // back to the pinned direct connection below.
+  if (proxyUrl) {
+    try { response = await requestViaProxy(EXA_MCP_URL, proxyUrl, { ...request, signal: AbortSignal.any([signal, AbortSignal.timeout(PROXY_ATTEMPT_MS)]) }); }
+    catch { if (signal.aborted) throw abortError(signal); }
+  }
+  if (!response) try { response = await requestPublicHttps(EXA_MCP_URL, { ...request, signal, publicDnsFallback }); } catch (error) {
     // A fixed provider endpoint failing DNS policy is service unavailability,
     // rather than a bad search query. Keep user-selected fetch URL errors as 400.
     if (error instanceof SearchError && error.code === "search-blocked-url") {

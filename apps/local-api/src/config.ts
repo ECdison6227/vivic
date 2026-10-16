@@ -36,6 +36,8 @@ export interface LocalApiConfig {
   asrTimeoutMs?: number;
   searchEnabled?: boolean;
   publicDnsFallback?: boolean;
+  /** Keyless search egress: `auto` (env > OS proxy), `direct`, or a proxy URL. Unset = direct. */
+  searchProxy?: string;
   bodyLimitBytes: number;
 }
 
@@ -87,6 +89,7 @@ export const loadConfig = (
     speechTimeoutMs: boundedTimeout(env.VIVIC_SPEECH_TIMEOUT_MS, SPEECH_TIMEOUT_MS),
     asrTimeoutMs: boundedTimeout(env.VIVIC_ASR_TIMEOUT_MS, 30000),
     searchEnabled: env.VIVIC_SEARCH_ENABLED !== "false",
+    searchProxy: env.VIVIC_SEARCH_PROXY?.trim() || "auto",
     bodyLimitBytes: 64 * 1024,
   };
 };

@@ -15,6 +15,8 @@ vi.mock("../src/search/transport.js", async importOriginal => ({
   requestPublicHttps: vi.fn(() => { throw new Error("TEST forbids fallback Exa/page network"); }),
 }));
 import { requestPublicHttps } from "../src/search/transport.js";
+import { STEPSEARCH_ENDPOINT } from "../src/search/stepsearch.js";
+import { EXA_MCP_URL } from "../src/search/upstream/exa.js";
 
 const ACCESS = "TEST-http-gpt-access";
 const REFRESH = "TEST-http-gpt-refresh";
@@ -84,7 +86,10 @@ async function fixture(stepfunConnected = true) {
   return { app, gpt, credentials, piStorage, ownStorage, fetchImpl, post, get, connect, intent, answer: (next: typeof answer) => { answer = next; } };
 }
 
+// Only tests asserting the failed-GPT search fallback may reach keyless search.
+let keylessFallbackExpected = false;
 beforeEach(() => {
+  keylessFallbackExpected = false;
   vi.stubGlobal("fetch", vi.fn(() => { throw new Error("TEST forbids ambient network"); }));
   vi.mocked(requestPublicHttps).mockClear();
 });
@@ -93,7 +98,7 @@ afterEach(() => {
   const fallbackCalls = vi.mocked(requestPublicHttps).mock.calls.length;
   vi.restoreAllMocks(); vi.unstubAllGlobals();
   expect(networkCalls, "No test may attempt ambient HTTP/OAuth refresh").toBe(0);
-  expect(fallbackCalls, "GPT must never reach native Exa/page fallback transport").toBe(0);
+  if (!keylessFallbackExpected) expect(fallbackCalls, "GPT must never reach native Exa/page fallback transport").toBe(0);
 });
 
 describe("GPT app routes through real Pi completions", () => {
@@ -186,6 +191,7 @@ describe("GPT app routes through real Pi completions", () => {
   });
 
   it("authentication-storage failures never echo raw messages, credential paths or tokens", async () => {
+    keylessFallbackExpected = true;
     const f = await fixture(); await f.connect();
     vi.spyOn(f.piStorage, "read").mockRejectedValue(new Error(`PRIVATE /Users/TEST/.pi/agent/auth.json ${ACCESS} ${REFRESH}`));
     const search = await f.post("/api/search", { query: "TEST" });
@@ -195,8 +201,10 @@ describe("GPT app routes through real Pi completions", () => {
     const connect = await f.post("/api/gpt/connect", { source: "pi" });
     const failed = await connect.json();
     expect(failed).toMatchObject({ ok: false, connected: false });
-    expect(JSON.stringify([result, failed, f.gpt.loginStatus()])).not.toMatch(/PRIVATE|\/Users\/TEST|auth\.json|TEST-http-gpt-access|TEST-http-gpt-refresh/);
-    expect(f.fetchImpl).not.toHaveBeenCalled();
+    expect(JSON.stringify([result, failed, f.gpt.loginStatus()])).not.toMatch(/PRIVATE|\/Users\/TEST|auth\.json|TEST-http-gpt-access|TEST-http-gpt-refresh|TEST-independent/);
+    // The failed GPT search continued only through the other search routes.
+    expect(f.fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([STEPSEARCH_ENDPOINT]);
+    expect(vi.mocked(requestPublicHttps).mock.calls.map(([url]) => url)).toEqual([EXA_MCP_URL]);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -276,13 +284,17 @@ describe("GPT app routes through real Pi completions", () => {
     await f.gpt.disconnect();
   });
 
-  it("search with a disconnected selected GPT does not silently switch to StepFun or Exa", async () => {
+  it("search with a disconnected selected GPT skips GPT and tries StepSearch, then keyless search", async () => {
+    keylessFallbackExpected = true;
     const f = await fixture(); await f.post("/api/providers/select", { provider: "gpt" });
     const response = await f.post("/api/search", { query: "TEST" });
     expect(response.status).toBe(502);
-    expect(await response.json()).toMatchObject({ ok: false, code: "search-unavailable" });
-    expect(f.fetchImpl).not.toHaveBeenCalled();
-    expect(requestPublicHttps).not.toHaveBeenCalled();
+    const result = await response.json();
+    expect(result).toMatchObject({ ok: false, code: "search-unavailable", error: expect.stringContaining("StepSearch、公共搜索") });
+    expect(JSON.stringify(result)).not.toContain(STEP_KEY);
+    expect(f.fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([STEPSEARCH_ENDPOINT]);
+    expect(vi.mocked(requestPublicHttps).mock.calls.map(([url]) => url)).toEqual([EXA_MCP_URL]);
+    expect(JSON.stringify(vi.mocked(requestPublicHttps).mock.calls)).not.toContain(STEP_KEY);
   });
 
   it("a provider switch also drops citations from an outstanding direct /api/search request", async () => {

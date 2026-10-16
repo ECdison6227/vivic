@@ -11,7 +11,7 @@ import { providerRecoveryHint } from "../providerError.js";
 import { createBudget } from "./budget.js";
 import { buildReminderActions, isReminderCreation, ReminderPlanSchema, reminderCoverageIssue } from "./reminders.js";
 import { actionExecutionIssue, normalizeBatchCamera, normalizeReminderStamps } from "./validation.js";
-import { searchQuery, buildSearchEnvelope } from "./search.js";
+import { searchQuery, buildSearchEnvelope, offlineSearchQuery } from "./search.js";
 import type { SearchEvidence } from "../search/index.js";
 import { publicSearchError } from "../search/errors.js";
 import type { Attachment } from "../images.js";
@@ -21,7 +21,7 @@ import { startsNewInstruction } from "@vivic/contracts";
 import { isMixedInstruction, parseNumericIntent } from "../data/numeric.js";
 import { scheduledReminderIntent } from "./scheduledReminders.js";
 import { articleEnvelope, articleRequest } from "./article.js";
-import type { FetchEvidence } from "../search/client.js";
+import { searchFallbackNote, type FetchEvidence } from "../search/client.js";
 import { localDecisionIntent } from "../decision/intent.js";
 import type { DecisionManager } from "../decision/manager.js";
 
@@ -128,7 +128,9 @@ export const runIntent = async (
         budget.signal.throwIfAborted();
         if ((deps.planner && !deps.planner.isCurrent()) || (!deps.planner && deps.credentials.getSecret() !== searchCredential)
           || (deps.isSessionCurrent && !deps.isSessionCurrent())) return { kind: "error", message: "模型连接已变更，旧检索结果已丢弃。", usedProvider };
-        const envelope = buildSearchEnvelope(query, req.canvasContext, results, summary);
+        // A fallback route answered: say so instead of switching silently.
+        const note = searchFallbackNote(deps.planner?.provider === "gpt" ? "gpt" : searchCredential ? "stepsearch" : "exa", results);
+        const envelope = buildSearchEnvelope(query, req.canvasContext, results, summary, note);
         return envelope ? { kind: "envelope", envelope, usedProvider }
           : { kind: "unknown", message: "没有找到可引用的公开来源，请换个关键词。", usedProvider };
       } catch (error) {
@@ -143,7 +145,12 @@ export const runIntent = async (
     }
     if (adapterOnly) return { kind: "clarify", message: "请明确要查询的城市或资料关键词；本次没有执行其他操作。", usedProvider: "rules" };
     const credential = deps.credentials.getSecret();
-    if (deps.planner ? !deps.planner.connected : !credential) return { kind: "unknown", message: deps.planner ? "GPT 未连接；本地文字指令仍可使用。请先连接 GPT 或选择 StepFun。" : OFFLINE_MESSAGE, usedProvider: "rules-offline" };
+    if (deps.planner ? !deps.planner.connected : !credential) {
+      // No model to plan with: an informational question still goes online.
+      const offlineQuery = deps.search && !hasImages && !continuation ? offlineSearchQuery(req.text) : null;
+      if (offlineQuery) return await runIntent({ text: `搜索 ${offlineQuery}`, canvasContext: req.canvasContext }, deps, budget.signal, true);
+      return { kind: "unknown", message: deps.planner ? "GPT 未连接；本地文字指令仍可使用。请先连接 GPT 或选择 StepFun。" : OFFLINE_MESSAGE, usedProvider: "rules-offline" };
+    }
     usedProvider = deps.planner?.provider ?? "stepfun";
     const reminderMode = !hasImages && !continuation && isReminderCreation(req.text);
     const system = (reminderMode ? buildReminderSystemPrompt() : buildSystemPrompt()) + (hasImages
