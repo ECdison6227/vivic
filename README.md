@@ -1,10 +1,12 @@
 # Vivic v0.6 — 双页面信息画布
 
-自然语言驱动的极简信息画布，Web First 个人版 MVP。当前已实现 **StepFun Coding Plan / GPT 两种 LLM、独立语音选择、七类卡片、真实天气、数值图表及转换、当次图片分析、拖动与 Pin**。GPT 复用既有 Pi OAuth 的真实推理、搜索和视觉已有本机证据。最新真实 7 卡浏览器流程 **5/5 通过，刷新前后均无重叠**；Chromium 全套 **58/58 通过**。最终单测 1110 项通过，类型与构建通过；物理语音、新 OAuth 交互及新版长期稳定性等仍有明确验收边界。
+自然语言驱动的极简信息画布，Web First 个人版 MVP。当前已实现 **StepFun Coding Plan / GPT 两种 LLM、独立语音、七类卡片、真实天气/搜索、数值图表/转换、当次图片、拖动/固定、事项提醒、子卡片、长文详情与中文/拼音找卡**。用户参与的新 GPT 授权已于 2026-10-16 完成；本人语音/设备与本轮完整手测仍待逐项验收。
+
+现在先看 [一期收尾与本轮检查](docs/finalization-20261016.md)，从 [完整测试清单第 0 组](docs/FINAL_ACCEPTANCE_CHECKLIST.md) 开始。128 项人工操作和 9 项技术检查分组进行，先修反馈，再逐条讨论 [二期候选](docs/PHASE2_CANDIDATES.md)，不同时加入部署/多用户/手机/新卡片功能。
 
 一个 Web 应用两条路由：`/control` 是唯一写入端，`/display` 是只读舞台。两窗口通过 BroadcastChannel snapshot/patch 同步，多画布使用 IndexedDB 保存。Display 可将拖动意图交给 Control owner 校验、落盘并确认，不自行写存储。规格见 `Vivic_Kimi_Handoff_v0.6/`；详细范围见 [实施现状](docs/implementation-status.md)。
 
-交付入口：[直接复制的测试输入](docs/MANUAL_TEST.md) · [完成/未完与验收事实](docs/DELIVERY.md) · [下一位 Agent 交接](docs/AGENT_HANDOFF.md) · [Git 分支约定](docs/GIT_WORKFLOW.md)。新 Agent 先读根目录 `README_FIRST.md`。
+交付入口：[完整测试清单](docs/FINAL_ACCEPTANCE_CHECKLIST.md) · [完成/未完与验收事实](docs/DELIVERY.md) · [下一位 Agent 交接](docs/AGENT_HANDOFF.md) · [Git 分支约定](docs/GIT_WORKFLOW.md)。新 Agent 先读根目录 `README_FIRST.md`。
 
 ## 启动
 
@@ -15,14 +17,14 @@ pnpm install
 pnpm dev          # web :5173；local-api 127.0.0.1:8787
 ```
 
-`pnpm dev:web` / `pnpm dev:api` 可分别启动。`pnpm build` 后，本机 API 进程也可托管 `apps/web/dist`。服务仅绑定 loopback；本地 bearer 由开发代理在服务端注入，浏览器不持有该令牌。后端热重启会清空 StepFun 内存 Key，需要重连。
+`pnpm dev:web` / `pnpm dev:api` 可分别启动。本轮手测使用上述开发代理；`pnpm build` 的静态文件不等于已交付服务器/多用户部署方案，生产路由与认证代理需在二期单独验证。服务仅绑定 loopback；本地 bearer 由开发代理在服务端注入，浏览器不持有该令牌。后端热重启会清空 StepFun 内存 Key，需要重连。
 
 ## 模型与独立语音
 
 控制端仅提供 **StepFun Coding Plan** 与 **GPT（Pi OAuth）** 两个 LLM 选项。
 
 - StepFun：粘贴 Plan Key，目录和短 JSON 推理均通过后才显示连接成功。Key 只在本机后端内存，不进入日志、浏览器存储、画布或导出。推理、ASR、TTS 使用 Plan 路径，不静默改投普通按量接口。
-- GPT：已安装 `@earendil-works/pi-ai` / `pi-coding-agent` **1.2.0**，复用 Pi 的既有 OAuth、刷新和 provider 传输；真实 `gpt-6-luna` 推理与搜索已通过。没有 coding agent session、文件/shell 工具、extensions 或 skills。新登录入口已实现，但完整的新 OAuth 浏览器授权交互尚未实测。
+- GPT：已安装 `@earendil-works/pi-ai` / `pi-coding-agent` **1.2.0**，复用既有 OAuth、刷新和 provider 传输；2026-10-16 本人新授权及真实推理/搜索/图片已有记录。没有 coding agent session、文件/shell 工具、extensions 或 skills；已有授权可以恢复，无须为这轮测试重复登录。
 - **ASR 与 TTS 分别选择，与 LLM 解耦**：ASR 可选 StepFun、本地 Sherpaw 或关闭；TTS 可选 StepFun、浏览器本地音色或关闭。GPT 未连接语音时仍可完整使用文字/卡片，不把 OAuth 当作语音 API 授权。
 - StepFun Plan ASR/PTT、8 种 TTS 音色已有历史真实接口证据。浏览器 TTS 使用声明 `localService` 的音色，不属于 Sherpaw TTS，也未证明任意设备断网可用。
 
@@ -34,7 +36,7 @@ Sherpaw **0.3.0** 的 ASR/KWS/VAD 和模型设置已接入。用户按需下载�
 
 PTT 松开后转写，默认先放入输入框检查。VAD/KWS 每次点击只处理前台单句，最长等待 300 秒、单段最长 60 秒，结束后需重新开启；失焦、隐藏、取消、切画布或失去 owner 时停止。不承诺锁屏、后台或关闭 Control 后持续唤醒。
 
-[本地语音证据](evidence/phase3-local-speech/REPORT.md)记录 17/17 独立生产浏览器项目：合成 WAV 的真实 X-ASR、VAD→ASR、虚拟 AudioWorklet 重采样，以及录音中「十分钟」的 KWS 命中。默认「你好维维」仅验证词表/native 初始化和静音不触发，**物理麦克风、该短语声学命中及误唤醒率尚未验收**。浏览器 TTS 仅做模拟原生事件测试，没有本地音色实际发声证据。接口和下载见 [local-speech](docs/local-speech.md)。
+[本地语音原证据](evidence/phase3-local-speech/REPORT.md)记录 17/17 独立生产浏览器项目：合成 WAV 的真实 X-ASR、VAD→ASR、虚拟 AudioWorklet 重采样等。默认「你好维维」随后有三种合成音色链路和静音会话记录，见 [剩余计划交付](docs/remaining-plan.md)；**本人麦克风、真实噪声中的唤醒召回/误触发和听感仍未验收**。浏览器本地 TTS 不能用模拟事件冒充实际发声。接口和下载见 [local-speech](docs/local-speech.md)。
 
 ## 七类卡片、数据与图片
 
@@ -52,9 +54,9 @@ Countdown、Todo、Note、SearchResult、Weather、Table、Chart 七类卡片均
 
 Control 可管理画布、主题、减少动效、Pin/取消 Pin、导出导入和撤销。Display 不增加工具栏；拖动只发送受限 `card.move`，owner 检查画布/epoch/版本/layout 基线、限流、去重并落盘，再同步确认。Pinned 卡不可拖动；未 Pin 卡仍可能参与后续自动布局。Fit 只改镜头。Auto 日夜主题支持自定义本地开始/结束时间（默认 07:00–19:00，可跨夜），背景与卡片同步按分钟切换；手动浅/深色优先。便笺可说「展开这张便笺」「收起便笺」，多张时先选择目标，原文保留。
 
-已有 10/30/60 卡创建、刷新和拖动的浏览器记录。最新真实 7 卡场景修复后，刷新前后的 `overlaps` 均为空数组；该结论限于已测场景，不概括为任意卡片组合均无重叠。详见 [canvas-interaction](docs/canvas-interaction.md)。
+已有 10/30/60 卡创建、刷新和拖动的浏览器记录。历史真实 7 卡场景修复后，刷新前后的 `overlaps` 均为空数组；该结论限于已测场景，不概括为任意卡片组合均无重叠。当前版本检查见一期收尾，原交互细节见 [canvas-interaction](docs/canvas-interaction.md)。
 
-## 已有证据与剩余边界
+## 历史基线证据与剩余边界
 
 | 记录 | 实际证明的范围 |
 | --- | --- |
@@ -64,17 +66,21 @@ Control 可管理画布、主题、减少动效、Pin/取消 Pin、导出导入�
 | [本地语音归档](evidence/phase3-local-speech/REPORT.md) | 固定模型文件、真实 WASM、合成音频、取消/缓存完整性及设置 UI；不是现场人声或本地 TTS 发声验收 |
 | [稳定性最终审计](evidence/phase3-stability/final-resource-audit.json) | 旧快照约 30 分钟 23/24 检查通过、主题检查失败；另一次完整运行中断；新快照 14/14 专项通过、soak 约 61 秒，不能称新版 30 分钟全通过 |
 
-Laya 当前组合 **NO_GO / MODEL_OR_ADAPTER_UNCERTAIN**，未进入生产；Winnow **BLOCKED**，未下载、未运行，见 [本机决策实验](docs/laya-poc.md)。新 OAuth 交互、物理麦克风、默认唤醒短语声学验收、Safari/长时监听、本地 TTS 听感、新版完整长期稳定性仍待验证。
+Laya 原组合 NO_GO，Winnow 未在本机接入；Kev 是默认关闭的中文实验，不是最终可靠选型，见 [本地决策](docs/local-decision.md)。新 OAuth 已完成；本人麦克风、真实环境唤醒/听感、系统输入法、物理 Safari/外接屏仍待验收。新版本的完整回归与实时长测以 [一期收尾](docs/finalization-20261016.md) 为准，不复用上表旧快照结论。
 
 ## 检查命令
 
 ```sh
 pnpm typecheck
 pnpm test
-cd apps/web && pnpm exec playwright test
+pnpm contracts:check
+pnpm build
+pnpm --filter @vivic/web exec playwright test
+pnpm --filter @vivic/web exec playwright test --config playwright.production.config.ts
+node scripts/verify-stability.mjs --no-video
 ```
 
-这些是复现入口，不代表本次文档更新重新执行了测试。真实联网测试需对应用户授权/模型连接；离线测试不能替代账号权限验收。最新测试按静音、TTS 关闭执行，不自动开麦或播放音频。
+这些命令按顺序运行，浏览器使用预留 5174/8788，不与日常 5173/8787 混用；长测与其他浏览器命令串行。实际执行结果见一期验证摘要。真实联网需对应用户授权/连接，离线测试不能替代账号权限验收；自动化静音，不采集物理麦克风。
 
 ## 目录
 

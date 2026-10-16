@@ -2,7 +2,7 @@
 
 本项目已经有可运行的 MVP 主线，**不要重新开始 Phase 0 或重写已完成模块**。
 
-2026-10-16 全项目完成度核对见 [brief 审计](docs/project-audit-20261016.md)：三项体验优化已实现，但生产调试入口、JSON 契约一致性、完整回归及现场验收仍有收尾项。该核对用于区分当前状态与历史阶段说明。
+2026-10-16 当前顺序：看 [一期收尾修复](docs/finalization-20261016.md)，按 [完整测试清单](docs/FINAL_ACCEPTANCE_CHECKLIST.md) 从第 0 组逐项测试、修复反馈，再讨论 [二期候选](docs/PHASE2_CANDIDATES.md)。三项体验和新 GPT 授权已实现/验证，不能根据旧“下一 case”段落重复开发或要求再次登录。[审计](docs/project-audit-20261016.md) 保留修复前的事实。
 
 1. 阅读 [下一位 Agent 交接](docs/AGENT_HANDOFF.md)：当前状态、运行方式、约束与建议顺序。
 2. 阅读 [交付说明](docs/DELIVERY.md) 和 [用户测试清单](docs/MANUAL_TEST.md)。

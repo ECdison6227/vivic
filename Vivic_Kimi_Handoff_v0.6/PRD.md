@@ -9,6 +9,8 @@
 
 ## 0. 冻结决策
 
+2026-10-16 用户更新：纯计时器仍只显示数字；带事项提醒显示事项与时间，未固定项合并，一次性到时退出 Display、记录留 Control。阅读材质、Control 长内容详情和中文/拼音找卡已实现。当前按 [完整清单](../docs/FINAL_ACCEPTANCE_CHECKLIST.md) 验收；服务器、多用户、手机控制台和新增 Assistant UI 卡片仅记录为二期候选，测试完成后再逐项展开。
+
 2026-10-15 用户更新：LLM 连接限定为 StepFun Coding Plan 与 GPT（复用 Pi 既有 OAuth），取代本文「Claude 等」及旧实施记录「OAuth 全部暂缓」描述。语音 STT/TTS 与 LLM 分开；GPT 未配语音时使用文字/卡片，不强制再填语音 Key。Sherpaw 本地 ASR/VAD/KWS 仍为待验证候选，TTS 不能从 Sherpa-ONNX 的整体能力推定已在 Sherpaw 可用。具体能力、事实来源和降级要求见 [模型与语音架构核查](../docs/provider-voice-architecture.md)。
 
 | ID | 决策 | 必须落实的行为 |
